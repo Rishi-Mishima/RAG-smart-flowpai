@@ -1,105 +1,110 @@
-派聪明（PaiSmart）是一个企业级的 AI 知识库管理系统，采用检索增强生成（RAG）技术，提供智能文档处理和检索能力。
+## RAG Smart Flow – AI Knowledge & Conversational System
 
-核心技术栈包括 ElasticSearch、Kafka、WebSocket、Spring Security、Docker、MySQL 和 Redis。
+A production-grade **Retrieval-Augmented Generation** (RAG) system for intelligent document processing, semantic search, and conversational AI.
 
-它的目标是帮助企业和个人更高效地管理和利用知识库中的信息，支持多租户架构，允许用户通过自然语言查询知识库，并获得基于自身文档的 AI 生成响应。
+It enables intelligent document processing and semantic retrieval by combining Elasticsearch-based search, vector embeddings, and large language models.
+
+Built with a modern full-stack architecture combining Spring Boot, Elasticsearch, and LLM integration, this system enables users to query their own knowledge base using natural language and receive context-aware AI-generated responses.
+
+> Core technologies include: `Elasticsearch`, `Kafka`, `WebSocket`, `Spring Security`, `Docker`, `MySQL`, and `Redis`.
+
+
 
 ![派聪明多模块架构](https://cdn.tobebetterjavaer.com/stutymore/README-20250730102133.png)
 
-系统允许用户：
+## ✨ Features
 
-- 上传和管理各种类型的文档
-- 自动处理和索引文档内容
-- 使用自然语言查询知识库
-- 接收基于自身文档的 AI 生成响应
+- 📄 Upload and manage various types of documents
+- ⚙️ Automatic document processing, parsing, and indexing
+- 🔍 Natural language querying over user-owned knowledge bases
+- 🤖 Context-aware AI responses grounded in retrieved documents
 
-用到的技术栈包括，先说后端的：
 
-+ 框架 : Spring Boot 3.4.2 (Java 17)
-+ 数据库 : MySQL 8.0
-+ ORM : Spring Data JPA
-+ 缓存 : Redis
-+ 搜索引擎 : Elasticsearch 8.10.0
-+ 消息队列 : Apache Kafka
-+ 文件存储 : MinIO
-+ 文档解析 : Apache Tika
-+ 安全认证 : Spring Security + JWT
-+ AI集成 : DeepSeek API/本地 Ollama+豆包 Embedding
-+ 实时通信 : WebSocket
-+ 依赖管理 : Maven
-+ 响应式编程 : WebFlux
 
-后端的整体项目结构：
+## 🧱 Tech Stack && 🏗️ Project Structure
+
+### Backend
+
+- **Framework**: Spring Boot 3 (Java 17)
+- **Database**: MySQL 8.0 (JPA / Hibernate)
+- **Cache**: Redis
+- **Search**: Elasticsearch 8.x (Hybrid Retrieval)
+- **Message Queue**: Apache Kafka
+- **File Storage**: MinIO
+- **Document Processing**: Apache Tika
+- **Security**: Spring Security + JWT
+- **AI Integration**:
+  - LLM: DeepSeek / Ollama (local)
+  - Embedding: Vector-based semantic search
+- **Realtime Communication**: WebSocket / SSE
+- **Build Tool**: Maven
+- **Reactive Support**: WebFlux
+
+<br>
+ 🧠 What Makes It Interesting
+
+- Hybrid retrieval (keyword + vector search)
+- RAG-based conversational system
+- Scalable async architecture (Kafka)
+- Real-time streaming responses
+- Enterprise-ready multi-tenant design
+
+
+### Backend (Spring Boot)
+
+The backend follows a layered architecture with clear separation of concerns:
 
 ```bash
-src/main/java/com/yizhaoqi/smartpai/
-├── SmartPaiApplication.java      # 主应用程序入口
-├── client/                       # 外部API客户端
-├── config/                       # 配置类
-├── consumer/                     # Kafka消费者
-├── controller/                   # REST API端点
-├── entity/                       # 数据实体
-├── exception/                    # 自定义异常
-├── handler/                      # WebSocket处理器
-├── model/                        # 领域模型
-├── repository/                   # 数据访问层
-├── service/                      # 业务逻辑
-└── utils/                        # 工具类
+src/main/java/com/yourname/ragflow/
+├── application/        # Application entry point
+├── client/             # External service clients (LLM, Embedding APIs)
+├── config/             # Configuration (Security, JWT, ES, Redis)
+├── controller/         # REST API layer
+├── service/            # Core business logic (RAG pipeline)
+├── repository/         # Data access layer (JPA)
+├── entity/             # Database entities
+├── model/              # Domain models / DTOs
+├── consumer/           # Kafka consumers (async processing)
+├── handler/            # WebSocket / streaming handlers
+├── exception/          # Global exception handling
+└── utils/              # Utility classes
 ```
+💡 Highlights
+- Layered architecture (Controller → Service → Repository)
+- Async processing via Kafka consumers
+- Real-time communication via WebSocket handlers
+- Modular design for RAG pipeline and external AI integration
 
-再说前端的，包括：
+<br>
 
-+ 框架 : Vue 3 + TypeScript
-+ 构建工具 : Vite
-+ UI组件 : Naive UI
-+ 状态管理 : Pinia
-+ 路由 : Vue Router
-+ 样式 : UnoCSS + SCSS
-+ 图标 : Iconify
-+ 包管理 : pnpm
+### Frontend (Vue 3 + TypeScript)
 
-前端的整体项目结构：
+🧱 Frontend Tech Stack:
+- **Framework**: Vue 3 + TypeScript  
+- **Build Tool**: Vite  
+- **UI Library**: Naive UI  
+- **State Management**: Pinia  
+- **Routing**: Vue Router  
+- **Styling**: UnoCSS + SCSS  
+- **Icons**: Iconify  
+- **Package Manager**: pnpm  
+
+<br>
+The frontend is constructed as :
 
 ```bash
 frontend/
-├── packages/           # 可重用模块
-├── public/             # 静态资源
-├── src/                # 主应用程序代码
-│   ├── assets/         # SVG图标，图片
-│   ├── components/     # Vue组件
-│   ├── layouts/        # 页面布局
-│   ├── router/         # 路由配置
-│   ├── service/        # API集成
-│   ├── store/          # 状态管理
-│   ├── views/          # 页面组件
-│   └── ...            # 其他工具和配置
-└── ...               # 构建配置文件
+├── public/             # Static assets
+├── src/
+│   ├── assets/         # Images & icons
+│   ├── components/     # Reusable UI components
+│   ├── layouts/        # Layout system
+│   ├── router/         # Routing configuration
+│   ├── store/          # State management (Pinia)
+│   ├── service/        # API layer
+│   ├── views/          # Page-level components
+│   └── utils/          # Utility functions
 ```
-
-## 派聪明的成绩
-
-派聪明是 9 月份上线的，截止到目前，已经取得了非常瞩目的成绩，我这里晒一下哈。
-
-
-![面渣逆袭+派聪明 拿下招银网络+科大讯飞](https://cdn.tobebetterjavaer.com/paicoding/fb5db62ab92092e2d74a4916b6a45710.png)
-
-
-![派聪明拿到的日常实习](https://cdn.tobebetterjavaer.com/paicoding/da01a535b091c5ebeed70bf9a08a90c6.png)
-
-
-![派聪明拿下合合信息](https://cdn.tobebetterjavaer.com/paicoding/3518a76f439c325de8df763482cbebc4.png)
-
-
-![派聪明拿下小红书](https://cdn.tobebetterjavaer.com/paicoding/7bed4d34460749d68db9c0fcbc4621a8.png)
-
-
-![派聪明拿下网易](https://cdn.tobebetterjavaer.com/paicoding/5f227edcb38ffe41aea8fc0880f64cad.png)
-
-说句真心话，看到这，就可以无脑冲这个项目了，因为这些，还只是冰山一角。扫下面的优惠券（或者长按自动识别）解锁派聪明源码和教程吧，[星球](https://javabetter.cn/zhishixingqiu/)目前定价 159 元/年，优惠完只需要 129 元，每天不到 0.35 元，绝对的超值。
-
-![派聪明优惠券](https://cdn.tobebetterjavaer.com/paicoding/97601d7a337d7d944b02bb4a79cd6430.png)
-
->派聪明如何写到简历上：[https://paicoding.com/column/10/2](https://paicoding.com/column/10/2)
 
 
 
@@ -301,86 +306,3 @@ pnpm run dev
 DEPLOY_SKIP_BUILD=1 ./deploy-front.sh
 ```
 
-## 八、解锁派聪明源码+教程
-
-那这次为了避免盗版，这次的代码仓库采用的是邀请制，加入星球后，在星球第一个置顶帖【球友必看】中获取邀请链接，审核通过后即可查看。
-
-![派聪明的源码申请](https://cdn.tobebetterjavaer.com/paicoding/0abd7b441b744b33d48277be776e58cc.png)
-
-派聪明的教程，这次托管在技术派教程上，之前只要在技术派上绑定过星球的成员编号，均可以解锁查看。
-
->派聪明教程地址：https://paicoding.com/column/10/1
-
-![派聪明教程](https://cdn.tobebetterjavaer.com/paicoding/a157a62358a6b3c2dab478988143271a.png)
-
-并且了照顾大家的阅读习惯，我们也会在星球里第一时间同步。
-
-![星球付费专栏](https://cdn.tobebetterjavaer.com/paicoding/d2c867d82d57ef1560fed6267eb02590.png)
-
-
-加入[「二哥的编程星球」](https://javabetter.cn/zhishixingqiu/)后，你还可以享受以下专属内容服务：
-
-- 1、**付费文档:** 派聪明 RAG、[微服务 PmHub](https://laigeoffer.cn/pmhub/learn/)、[前后端分离技术派](https://javabetter.cn/zhishixingqiu/paicoding.html)、轮子 MYDB、入门编程喵、AI+MCP 的校招派等项目配套的 60 万+ 字教程查看权限
-- 2、**简历修改**: 提供价值超 600 元的[简历修改服务](https://javabetter.cn/zhishixingqiu/jianli.html)，附赠星球 5000+优质简历模板可供参考
-- 3、**专属问答**: 向二哥和星球嘉宾发起 1v1 提问，内容不限于 offer 选择、学习路线、职业规划等
-- 4、**面试指南**: 获取针对校招、社招的 40 万+字面试求职攻略《[Java 面试指南](https://javabetter.cn/zhishixingqiu/mianshi.html)》，以及二哥的 LeetCode 刷题笔记、一灰的职场进阶之路、华为 OD 题库
-- 5、**学习环境:** 打造一个沉浸式的学习环境，有一种高考冲刺、大学考研的氛围
-
-截止到 2025 年 07 月 31 日，已经有 9000+ 球友加入星球了，很多小伙伴在认真学习项目之后，都成功拿到了心仪的校招或者社招 offer，我就随便举两个例子。
-
-![美团快手 TP-LINK 拼多多](https://cdn.tobebetterjavaer.com/stutymore/readme-20250703180225.png)
-
-![阿里云荣耀字节](https://cdn.tobebetterjavaer.com/stutymore/readme-20250703180738.png)
-
-
-目前，派聪明这个项目也收尾了，大家可以放心冲 😊。并且一次购买不需要额外付费，即可获取星球的所有付费资料，帮助你少走弯路，提高学习的效率。直接微信扫下面这个优惠券即可加入。
-
-![派聪明优惠券](https://cdn.tobebetterjavaer.com/paicoding/97601d7a337d7d944b02bb4a79cd6430.png)
-
-> 步骤 ①：微信扫描上方二维码，点击「加入知识星球」按钮
-
-> 步骤 ②：访问星球置顶帖球友必看：[https://t.zsxq.com/11rEo9Pdu](https://t.zsxq.com/11rEo9Pdu)，获取项目的源码和配套教程
-
-加入星球需要多少钱呢？星球目前定价 159 元，限时优惠 30 元，目前只需要 129 元就可以加入。
-
-0 人的时候优惠完 69 元，1000 人的时候 79 元，2000 人的时候 89 元，3000 人的时候 99 元，5000 人的时候是 119 元，后面肯定还会继续涨。
-
-付费社群我加入了很多，但从未见过比这更低价格，提供更多服务的社群，光派聪明这个项目的就能让你值回票价。
-
-多说一句，任何时候，技术都是我们程序员的安身立命之本，如果你能认认真真跟完派聪明的源码和教程，相信你的编程功底会提升一大截。
-
-再给大家展示一下派聪明教程的部分目录吧，真的是满满的诚意和干货。
-
-![派聪明整体设计方案](https://cdn.tobebetterjavaer.com/paicoding/6b670c22740e9e7b3dfae35fd646196e.png)
-
-![派聪明 prompt](https://cdn.tobebetterjavaer.com/paicoding/1e5e0055300a70a4cb83791f889bec20.png)
-
-![派聪明教程目录](https://cdn.tobebetterjavaer.com/stutymore/readme-20250106103555.png)
-
-
-之前就有球友反馈说，“**二哥，你这套教程如果让培训机构来卖，1999 元都算少！**
-
-讲真心话，这个价格也不会持续很久，星球已经 9000 人了，马上 10000 人会迎来一波新的涨价（169 元），所以早买早享受，不要等，想好了就去冲，错过不能说后悔一辈子，但至少会有遗憾。
-
-
-![球友们加入星球后的真实反馈](https://cdn.tobebetterjavaer.com/paicoding/0d2b52387576b0884e832c05594fc9de.png)
-
-我们的代码，严格按照大厂的标准来，无论是整体的架构，还是具体的细节，都是无可挑剔的学习对象。
-
-![派聪明的代码细节](https://cdn.tobebetterjavaer.com/paicoding/e946bb63f1fe5279888bb7f1fcb649b0.png)
-
-之前曾有球友问我：“二哥，你的星球怎么不定价 199、299、399 啊，我感觉星球提供的价值远超这个价格啊。”
-
-答案很明确，我有自己的原则，**拒绝割韭菜，用心做内容，能帮一个是一个**。
-
-![我愿意给大家最真诚的服务](https://cdn.tobebetterjavaer.com/paicoding/e946bb63f1fe5279888bb7f1fcb649b0.png)
-
-不为别的，为的就是给所有人提供一个可持续的学习环境。当然了，随着人数的增多，二哥付出的精力越来越多，星球也会涨价，今天这批 30 元的优惠券不仅 2025 年最大的优惠力度，也是 2026 年最大的优惠力度，现在入手就是最划算的，再犹豫就只能等着涨价了。
-
-想想，QQ 音乐听歌连续包年需要 **88 元**，腾讯视频连续包年需要 **178 元**，腾讯体育包年 **233 元**。我相信，二哥编程星球回馈给你的，将是 10 倍甚至百倍的价值。
-
-最后，希望小伙伴们，能紧跟我们的步伐！不要掉队。今年，和二哥一起翻身、一起逆袭、一起晋升、一起拿高薪 offer！
-
-那无论你是社招还是校招，我们都希望你通过派聪明这个项目，能提升自己的简历含金量，拿到更好的 offer，也能更加从容的应对面试中各种 AI 相关的考察。
-
-冲。
