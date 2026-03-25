@@ -75,3 +75,9 @@ frontend/AutoClaw.pem
 src/main/resources/cert
 /.runtime
 .env
+
+.env
+target/
+logs/
+.idea/
+.DS_Store
