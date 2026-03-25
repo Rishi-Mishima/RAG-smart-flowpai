@@ -69,8 +69,9 @@ public class UploadService {
         // 获取文件类型信息
         String fileType = getFileType(fileName);
         String contentType = file.getContentType();
-        
-        logger.info("[uploadChunk] 开始处理分片上传请求 => fileMd5: {}, chunkIndex: {}, totalSize: {}, fileName: {}, fileType: {}, contentType: {}, fileSize: {}, orgTag: {}, isPublic: {}, userId: {}", 
+
+        // 开始处理分片上传请求
+        logger.info("[uploadChunk] Starting to process chunked upload request => fileMd5: {}, chunkIndex: {}, totalSize: {}, fileName: {}, fileType: {}, contentType: {}, fileSize: {}, orgTag: {}, isPublic: {}, userId: {}",
                    fileMd5, chunkIndex, totalSize, fileName, fileType, contentType, file.getSize(), orgTag, isPublic, userId);
         
         try {
@@ -130,8 +131,9 @@ public class UploadService {
                     logger.info("分片已上传但数据库无记录，需要补充分片信息 => fileMd5: {}, fileName: {}, chunkIndex: {}", fileMd5, fileName, chunkIndex);
                     
                     // 计算分片的MD5值
-                    byte[] fileBytes = file.getBytes();
-                    chunkMd5 = DigestUtils.md5Hex(fileBytes);
+//                    byte[] fileBytes = file.getBytes();
+//                    chunkMd5 = DigestUtils.md5Hex(fileBytes);
+                    chunkMd5 = DigestUtils.md5Hex(file.getInputStream());
                     
                     // 构建存储路径
                     storagePath = "chunks/" + fileMd5 + "/" + chunkIndex;
@@ -537,6 +539,8 @@ public class UploadService {
      * @param userId 用户ID
      * @return 合成文件的访问 URL
      */
+
+    //没有自己拼文件，而是让 MinIO 合并
     public String mergeChunks(String fileMd5, String fileName, String userId) {
         String fileType = getFileType(fileName);
         logger.info("开始合并文件分片 => fileMd5: {}, fileName: {}, fileType: {}, userId: {}", fileMd5, fileName, fileType, userId);
@@ -546,7 +550,7 @@ public class UploadService {
             List<ChunkInfo> chunks = chunkInfoRepository.findByFileMd5OrderByChunkIndexAsc(fileMd5);
             logger.info("查询到分片信息 => fileMd5: {}, fileName: {}, fileType: {}, 分片数量: {}", fileMd5, fileName, fileType, chunks.size());
             
-            // 检查分片数量是否与预期一致
+            // 检查分片数量是否与预期一致 - 校验分片完整性
             int expectedChunks = getTotalChunks(fileMd5, userId);
             if (chunks.size() != expectedChunks) {
                 logger.error("分片数量不匹配 => fileMd5: {}, fileName: {}, fileType: {}, 期望: {}, 实际: {}", 
@@ -611,7 +615,7 @@ public class UploadService {
                 );
                 logger.info("合并文件信息 => fileMd5: {}, fileName: {}, fileType: {}, path: {}, size: {}", fileMd5, fileName, fileType, mergedPath, stat.size());
 
-                // 清理分片文件
+                // 清理分片文件 - 删除分片（节省存储）
                 logger.info("开始清理分片文件 => fileMd5: {}, fileName: {}, 分片数量: {}", fileMd5, fileName, partPaths.size());
                 for (String path : partPaths) {
                     try {
@@ -629,7 +633,7 @@ public class UploadService {
                 }
                 logger.info("分片文件清理完成 => fileMd5: {}, fileName: {}, fileType: {}", fileMd5, fileName, fileType);
 
-                // 删除 Redis 中的分片状态记录
+                // 删除 Redis 中的分片状态记录 - 删除 Redis 状态
                 logger.info("删除Redis中的分片状态记录 => fileMd5: {}, fileName: {}, userId: {}", fileMd5, fileName, userId);
                 deleteFileMark(fileMd5, userId);
                 logger.info("分片状态记录已删除 => fileMd5: {}, fileName: {}, userId: {}", fileMd5, fileName, userId);
@@ -647,6 +651,7 @@ public class UploadService {
                 logger.info("文件状态已更新为已完成 => fileMd5: {}, fileName: {}, fileType: {}", fileMd5, fileName, fileType);
 
                 // 生成预签名 URL（有效期为 1 小时）
+                //不走后端，直接访问 MinIO
                 logger.info("开始生成预签名URL => fileMd5: {}, fileName: {}, path: {}", fileMd5, fileName, mergedPath);
                 String presignedUrl = minioClient.getPresignedObjectUrl(
                         GetPresignedObjectUrlArgs.builder()
