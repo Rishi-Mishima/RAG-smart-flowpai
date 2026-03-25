@@ -1,0 +1,145 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  # dev 用于本地源码启动，优先读取 `.env` 中的同名变量。
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/PaiSmart?useSSL=false&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:true}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 100MB
+  kafka:
+    enabled: true
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      enable-idempotence: true
+      transactional-id-prefix: file-upload-tx-
+      properties:
+        client.dns.lookup: use_all_dns_ips
+    consumer:
+      group-id: file-processing-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        client.dns.lookup: use_all_dns_ips
+    topic:
+      file-processing: file-processing-topic1
+      dlt: file-processing-dlt
+      # 本地单机 Kafka 默认建议 1 分区、1 副本
+      partitions: ${SPRING_KAFKA_TOPIC_PARTITIONS:1}
+      replication-factor: ${SPRING_KAFKA_TOPIC_REPLICATION_FACTOR:1}
+  webflux:
+    client:
+      max-in-memory-size: 16MB
+  codec:
+    max-in-memory-size: 16MB
+
+minio:
+  # 本地 MinIO 默认端口 9000
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  accessKey: ${MINIO_ACCESS_KEY:}
+  secretKey: ${MINIO_SECRET_KEY:}
+  bucketName: ${MINIO_BUCKET_NAME:uploads}
+  publicUrl: ${MINIO_PUBLIC_URL:http://localhost:9000}
+
+jwt:
+  secret-key: ${JWT_SECRET_KEY:}
+
+admin:
+  bootstrap:
+    # 只在第一次初始化管理员时短暂开启
+    enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
+    username: ${ADMIN_BOOTSTRAP_USERNAME:}
+    password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+    primary-org: ${ADMIN_BOOTSTRAP_PRIMARY_ORG:default}
+    org-tags: ${ADMIN_BOOTSTRAP_ORG_TAGS:default,admin}
+
+app:
+  auth:
+    registration:
+      # 默认邀请码注册，避免开发环境误开放
+      mode: ${APP_AUTH_REGISTRATION_MODE:INVITE_ONLY}
+      invite-required: ${APP_AUTH_INVITE_REQUIRED:true}
+
+rate-limit:
+  register:
+    max: ${RATE_LIMIT_REGISTER_MAX:20}
+    window-seconds: ${RATE_LIMIT_REGISTER_WINDOW_SECONDS:600}
+  login:
+    max: ${RATE_LIMIT_LOGIN_MAX:30}
+    window-seconds: ${RATE_LIMIT_LOGIN_WINDOW_SECONDS:60}
+  chat-message:
+    max: ${RATE_LIMIT_CHAT_MESSAGE_MAX:30}
+    window-seconds: ${RATE_LIMIT_CHAT_MESSAGE_WINDOW_SECONDS:60}
+  llm-request:
+    minute-max: ${RATE_LIMIT_LLM_MINUTE_MAX:20}
+    minute-window-seconds: ${RATE_LIMIT_LLM_MINUTE_WINDOW_SECONDS:60}
+    day-max: ${RATE_LIMIT_LLM_DAY_MAX:500}
+    day-window-seconds: ${RATE_LIMIT_LLM_DAY_WINDOW_SECONDS:86400}
+  embedding-batch:
+    minute-max: ${RATE_LIMIT_EMBEDDING_MINUTE_MAX:60}
+    minute-window-seconds: ${RATE_LIMIT_EMBEDDING_MINUTE_WINDOW_SECONDS:60}
+    day-max: ${RATE_LIMIT_EMBEDDING_DAY_MAX:2000}
+    day-window-seconds: ${RATE_LIMIT_EMBEDDING_DAY_WINDOW_SECONDS:86400}
+
+file:
+  parsing:
+    chunk-size: 512
+
+elasticsearch:
+  # dev 下允许按需使用 https + 自签名证书
+  host: ${ELASTICSEARCH_HOST:localhost}
+  port: ${ELASTICSEARCH_PORT:9200}
+  scheme: ${ELASTICSEARCH_SCHEME:http}
+  username: ${ELASTICSEARCH_USERNAME:elastic}
+  password: ${ELASTICSEARCH_PASSWORD:}
+  insecure-trust-all-certificates: ${ELASTICSEARCH_INSECURE_TRUST_ALL_CERTIFICATES:true}
+
+security:
+  # 前端调试域名白名单，支持 Origin pattern
+  allowed-origins: ${SECURITY_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+
+logging:
+  level:
+    org.springframework.web: ${LOG_LEVEL_WEB:DEBUG}
+    org.springframework.boot.autoconfigure.web.servlet: ${LOG_LEVEL_AUTOCONFIG:DEBUG}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:DEBUG}
+    com.yizhaoqi.smartpai: ${LOG_LEVEL_APP:DEBUG}
+    io.minio: ${LOG_LEVEL_MINIO:DEBUG}
+
+deepseek:
+  api:
+    url: ${DEEPSEEK_API_URL:https://api.deepseek.com/v1}
+    model: ${DEEPSEEK_API_MODEL:deepseek-chat}
+    key: ${DEEPSEEK_API_KEY:}
+
+embedding:
+  api:
+    url: ${EMBEDDING_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+    key: ${EMBEDDING_API_KEY:}
+    model: ${EMBEDDING_API_MODEL:text-embedding-v4}
+    batch-size: ${EMBEDDING_BATCH_SIZE:10}
+    dimension: ${EMBEDDING_DIMENSION:2048}

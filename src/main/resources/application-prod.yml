@@ -1,0 +1,29 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+admin:
+  bootstrap:
+    enabled: false
+
+app:
+  auth:
+    registration:
+      mode: INVITE_ONLY
+      invite-required: true
+
+elasticsearch:
+  insecure-trust-all-certificates: false
+
+security:
+  allowed-origins: ${SECURITY_ALLOWED_ORIGINS}
+
+logging:
+  level:
+    org.springframework.web: INFO
+    org.springframework.boot.autoconfigure.web.servlet: INFO
+    org.springframework.security: INFO
+    com.yizhaoqi.smartpai: INFO
+    io.minio: WARN

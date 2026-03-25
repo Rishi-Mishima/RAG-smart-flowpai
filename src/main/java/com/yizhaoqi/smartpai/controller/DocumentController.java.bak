@@ -1,0 +1,763 @@
+package com.yizhaoqi.smartpai.controller;
+
+import com.yizhaoqi.smartpai.model.FileUpload;
+import com.yizhaoqi.smartpai.model.OrganizationTag;
+import com.yizhaoqi.smartpai.repository.FileUploadRepository;
+import com.yizhaoqi.smartpai.repository.OrganizationTagRepository;
+import com.yizhaoqi.smartpai.service.ChatHandler;
+import com.yizhaoqi.smartpai.service.DocumentService;
+import com.yizhaoqi.smartpai.utils.LogUtils;
+import com.yizhaoqi.smartpai.utils.JwtUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+/**
+ * 文档控制器类，处理文档相关操作请求
+ */
+@RestController
+@RequestMapping("/api/v1/documents")
+public class DocumentController {
+
+    @Autowired
+    private DocumentService documentService;
+
+    @Autowired
+    private FileUploadRepository fileUploadRepository;
+
+    @Autowired
+    private OrganizationTagRepository organizationTagRepository;
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
+    @Autowired
+    private ChatHandler chatHandler;
+
+    /**
+     * 删除文档及其相关数据
+     * 
+     * @param fileMd5 文件MD5
+     * @param userId 当前用户ID
+     * @param role 用户角色
+     * @return 删除结果
+     */
+    @DeleteMapping("/{fileMd5}")
+    public ResponseEntity<?> deleteDocument(
+            @PathVariable String fileMd5,
+            @RequestAttribute("userId") String userId,
+            @RequestAttribute("role") String role) {
+        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("DELETE_DOCUMENT");
+        try {
+            LogUtils.logBusiness("DELETE_DOCUMENT", userId, "接收到删除文档请求: fileMd5=%s, role=%s", fileMd5, role);
+            
+            // 获取文件信息
+            Optional<FileUpload> fileOpt = fileUploadRepository.findByFileMd5AndUserId(fileMd5, userId);
+            if (fileOpt.isEmpty()) {
+                LogUtils.logUserOperation(userId, "DELETE_DOCUMENT", fileMd5, "FAILED_NOT_FOUND");
+                monitor.end("删除失败：文档不存在");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.NOT_FOUND.value());
+                response.put("message", "文档不存在");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+            
+            FileUpload file = fileOpt.get();
+            
+            // 权限检查：只有文件所有者或管理员可以删除
+            if (!file.getUserId().equals(userId) && !"ADMIN".equals(role)) {
+                LogUtils.logUserOperation(userId, "DELETE_DOCUMENT", fileMd5, "FAILED_PERMISSION_DENIED");
+                LogUtils.logBusiness("DELETE_DOCUMENT", userId, "用户无权删除文档: fileMd5=%s, fileOwner=%s", fileMd5, file.getUserId());
+                monitor.end("删除失败：权限不足");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.FORBIDDEN.value());
+                response.put("message", "没有权限删除此文档");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            }
+            
+            // 执行删除操作
+            documentService.deleteDocument(fileMd5, userId);
+            
+            LogUtils.logFileOperation(userId, "DELETE", file.getFileName(), fileMd5, "SUCCESS");
+            monitor.end("文档删除成功");
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "文档删除成功");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            LogUtils.logBusinessError("DELETE_DOCUMENT", userId, "删除文档失败: fileMd5=%s", e, fileMd5);
+            monitor.end("删除失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "删除文档失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * 获取用户可访问的所有文件列表
+     * 
+     * @param userId 当前用户ID
+     * @param orgTags 用户所属组织标签
+     * @return 可访问的文件列表
+     */
+    @GetMapping("/accessible")
+    public ResponseEntity<?> getAccessibleFiles(
+            @RequestAttribute("userId") String userId,
+            @RequestAttribute("orgTags") String orgTags) {
+        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_ACCESSIBLE_FILES");
+        try {
+            LogUtils.logBusiness("GET_ACCESSIBLE_FILES", userId, "接收到获取可访问文件请求: orgTags=%s", orgTags);
+            
+            List<FileUpload> files = documentService.getAccessibleFiles(userId, orgTags);
+            
+            LogUtils.logUserOperation(userId, "GET_ACCESSIBLE_FILES", "file_list", "SUCCESS");
+            LogUtils.logBusiness("GET_ACCESSIBLE_FILES", userId, "成功获取可访问文件: fileCount=%d", files.size());
+            monitor.end("获取可访问文件成功");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "获取可访问文件列表成功");
+            response.put("data", files);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_ACCESSIBLE_FILES", userId, "获取可访问文件失败", e);
+            monitor.end("获取可访问文件失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "获取可访问文件列表失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * 获取用户上传的所有文件列表
+     * 
+     * @param userId 当前用户ID
+     * @return 用户上传的文件列表
+     */
+    @GetMapping("/uploads")
+    public ResponseEntity<?> getUserUploadedFiles(
+            @RequestAttribute("userId") String userId) {
+        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USER_UPLOADED_FILES");
+        try {
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "接收到获取用户上传文件请求");
+            
+            List<FileUpload> files = documentService.getUserUploadedFiles(userId);
+            
+            // 将FileUpload转换为包含tagName的DTO
+            List<Map<String, Object>> fileData = files.stream().map(file -> {
+                Map<String, Object> dto = new HashMap<>();
+                dto.put("fileMd5", file.getFileMd5());
+                dto.put("fileName", file.getFileName());
+                dto.put("totalSize", file.getTotalSize());
+                dto.put("status", file.getStatus());
+                dto.put("userId", file.getUserId());
+                dto.put("public", file.isPublic());
+                dto.put("createdAt", file.getCreatedAt());
+                dto.put("mergedAt", file.getMergedAt());
+                
+                // 将orgTag从tagId转换为tagName
+                String orgTagName = getOrgTagName(file.getOrgTag());
+                dto.put("orgTagName", orgTagName);
+                
+                return dto;
+            }).collect(Collectors.toList());
+            
+            LogUtils.logUserOperation(userId, "GET_USER_UPLOADED_FILES", "file_list", "SUCCESS");
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "成功获取用户上传文件: fileCount=%d", files.size());
+            monitor.end("获取用户上传文件成功");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "获取用户上传文件列表成功");
+            response.put("data", fileData);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_USER_UPLOADED_FILES", userId, "获取用户上传文件失败", e);
+            monitor.end("获取用户上传文件失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "获取用户上传文件列表失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * 根据文件名下载文件
+     * 
+     * @param fileName 文件名
+     * @param token JWT token
+     * @return 文件资源或错误响应
+     */
+    @GetMapping("/download")
+    public ResponseEntity<?> downloadFileByName(
+            @RequestParam String fileName,
+            @RequestParam(required = false) String token) {
+        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("DOWNLOAD_FILE_BY_NAME");
+        try {
+            // 验证token并获取用户信息
+            String userId = null;
+            String orgTags = null;
+            
+            if (token != null && !token.trim().isEmpty()) {
+                try {
+                    // 解析JWT token获取用户信息
+                    // 注意：JWT中的sub字段存储用户名，userId字段存储用户ID（但有时可能存储的是用户名）
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                    orgTags = jwtUtils.extractOrgTagsFromToken(token);
+                } catch (Exception e) {
+                    LogUtils.logBusiness("DOWNLOAD_FILE_BY_NAME", "anonymous", "Token解析失败: fileName=%s", fileName);
+                }
+            }
+            
+            LogUtils.logBusiness("DOWNLOAD_FILE_BY_NAME", userId != null ? userId : "anonymous", "接收到文件下载请求: fileName=%s", fileName);
+            
+            // 如果没有提供token或token无效，只允许下载公开文件
+            if (userId == null) {
+                // 查找公开文件
+                Optional<FileUpload> publicFile = fileUploadRepository.findByFileNameAndIsPublicTrue(fileName);
+                if (publicFile.isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("code", HttpStatus.NOT_FOUND.value());
+                    response.put("message", "文件不存在或需要登录访问");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                }
+                
+                FileUpload file = publicFile.get();
+                String downloadUrl = documentService.generateDownloadUrl(file.getFileMd5());
+                
+                if (downloadUrl == null) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+                    response.put("message", "无法生成下载链接");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                }
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", 200);
+                response.put("message", "文件下载链接生成成功");
+                response.put("data", Map.of(
+                    "fileName", file.getFileName(),
+                    "downloadUrl", downloadUrl,
+                    "fileSize", file.getTotalSize()
+                ));
+                return ResponseEntity.ok(response);
+            }
+            
+            // 有token的情况，查找用户可访问的文件
+            List<FileUpload> accessibleFiles = documentService.getAccessibleFiles(userId, orgTags);
+            
+            // 根据文件名查找匹配的文件
+            Optional<FileUpload> targetFile = accessibleFiles.stream()
+                    .filter(file -> file.getFileName().equals(fileName))
+                    .findFirst();
+                    
+            if (targetFile.isEmpty()) {
+                LogUtils.logUserOperation(userId, "DOWNLOAD_FILE_BY_NAME", fileName, "FAILED_NOT_FOUND");
+                monitor.end("下载失败：文件不存在或无权限访问");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.NOT_FOUND.value());
+                response.put("message", "文件不存在或无权限访问");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+            
+            FileUpload file = targetFile.get();
+            
+            // 生成下载链接或返回预签名URL
+            String downloadUrl = documentService.generateDownloadUrl(file.getFileMd5());
+            
+            if (downloadUrl == null) {
+                LogUtils.logUserOperation(userId, "DOWNLOAD_FILE_BY_NAME", fileName, "FAILED_GENERATE_URL");
+                monitor.end("下载失败：无法生成下载链接");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+                response.put("message", "无法生成下载链接");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+            
+            LogUtils.logFileOperation(userId, "DOWNLOAD", file.getFileName(), file.getFileMd5(), "SUCCESS");
+            LogUtils.logUserOperation(userId, "DOWNLOAD_FILE_BY_NAME", fileName, "SUCCESS");
+            monitor.end("文件下载链接生成成功");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "文件下载链接生成成功");
+            response.put("data", Map.of(
+                "fileName", file.getFileName(),
+                "downloadUrl", downloadUrl,
+                "fileSize", file.getTotalSize()
+            ));
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            String userId = "unknown";
+            try {
+                if (token != null && !token.trim().isEmpty()) {
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                }
+            } catch (Exception ignored) {}
+            
+            LogUtils.logBusinessError("DOWNLOAD_FILE_BY_NAME", userId, "文件下载失败: fileName=%s", e, fileName);
+            monitor.end("下载失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "文件下载失败: " + e.getMessage()); 
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * 预览文件内容
+     *
+     * @param fileName 文件名
+     * @param fileMd5 文件MD5（可选，优先使用）
+     * @param token JWT token (URL参数，用于向后兼容)
+     * @return 文件预览内容或错误响应
+     */
+    @GetMapping("/preview")
+    public ResponseEntity<?> previewFileByName(
+            @RequestParam String fileName,
+            @RequestParam(required = false) String fileMd5,
+            @RequestParam(required = false) String token) {
+
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("PREVIEW_FILE");
+        try {
+            // 验证token并获取用户信息
+            String userId = null;
+            String orgTags = null;
+
+            // 优先从Spring Security上下文获取已认证的用户信息
+            try {
+                var authentication = SecurityContextHolder.getContext().getAuthentication();
+                if (authentication != null && authentication.isAuthenticated()
+                    && authentication.getPrincipal() instanceof UserDetails) {
+                    UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+                    userId = userDetails.getUsername();
+                    // 从userDetails中获取组织标签信息
+                    orgTags = userDetails.getAuthorities().stream()
+                        .map(auth -> auth.getAuthority().replace("ROLE_", ""))
+                        .findFirst()
+                        .orElse(null);
+                }
+            } catch (Exception e) {
+                LogUtils.logBusiness("PREVIEW_FILE", "anonymous", "Security上下文获取失败: fileName=%s", fileName);
+            }
+
+            // 如果Security上下文中没有用户信息，尝试从URL参数token中获取
+            if (userId == null && token != null && !token.trim().isEmpty()) {
+                try {
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                    orgTags = jwtUtils.extractOrgTagsFromToken(token);
+                } catch (Exception e) {
+                    LogUtils.logBusiness("PREVIEW_FILE", "anonymous", "Token解析失败: fileName=%s", fileName);
+                }
+            }
+
+            LogUtils.logBusiness("PREVIEW_FILE", userId != null ? userId : "anonymous",
+                "接收到文件预览请求: fileName=%s, fileMd5=%s", fileName, fileMd5);
+
+            FileUpload file = null;
+
+            // 如果提供了 fileMd5，优先使用 MD5 查询
+            if (fileMd5 != null && !fileMd5.trim().isEmpty()) {
+                Optional<FileUpload> fileByMd5 = fileUploadRepository.findByFileMd5(fileMd5);
+                if (fileByMd5.isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("code", HttpStatus.NOT_FOUND.value());
+                    response.put("message", "文件不存在");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                }
+                file = fileByMd5.get();
+
+                // 验证权限
+                if (!file.isPublic()) {
+                    if (userId == null) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("code", HttpStatus.FORBIDDEN.value());
+                        response.put("message", "需要登录访问");
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                    }
+
+                    List<FileUpload> accessibleFiles = documentService.getAccessibleFiles(userId, orgTags);
+                    boolean hasAccess = accessibleFiles.stream()
+                        .anyMatch(f -> f.getFileMd5().equals(fileMd5));
+
+                    if (!hasAccess) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("code", HttpStatus.FORBIDDEN.value());
+                        response.put("message", "无权限访问此文件");
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                    }
+                }
+            } else {
+                // 降级：使用文件名查询（向后兼容）
+                if (userId == null) {
+                    Optional<FileUpload> publicFile = fileUploadRepository.findByFileNameAndIsPublicTrue(fileName);
+                    if (publicFile.isEmpty()) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("code", HttpStatus.NOT_FOUND.value());
+                        response.put("message", "文件不存在或需要登录访问");
+                        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                    }
+                    file = publicFile.get();
+                } else {
+                    List<FileUpload> accessibleFiles = documentService.getAccessibleFiles(userId, orgTags);
+                    Optional<FileUpload> targetFile = accessibleFiles.stream()
+                        .filter(f -> f.getFileName().equals(fileName))
+                        .findFirst();
+
+                    if (targetFile.isEmpty()) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("code", HttpStatus.NOT_FOUND.value());
+                        response.put("message", "文件不存在或无权限访问");
+                        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                    }
+                    file = targetFile.get();
+                }
+            }
+
+            // 获取预览内容
+            String previewContent = documentService.getFilePreviewContent(file.getFileMd5(), file.getFileName());
+
+            if (previewContent == null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+                response.put("message", "无法获取文件预览内容");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+
+            LogUtils.logUserOperation(userId != null ? userId : "anonymous", "PREVIEW_FILE", fileName, "SUCCESS");
+            LogUtils.logBusiness("PREVIEW_FILE", userId != null ? userId : "anonymous", "成功获取文件预览: fileName=%s", fileName);
+            monitor.end("文件预览成功");
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "文件预览内容获取成功");
+            response.put("data", Map.of(
+                "fileName", file.getFileName(),
+                "content", previewContent,
+                "fileSize", file.getTotalSize()
+            ));
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            String userId = "unknown";
+            try {
+                if (token != null && !token.trim().isEmpty()) {
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                }
+            } catch (Exception ignored) {}
+
+            LogUtils.logBusinessError("PREVIEW_FILE", userId, "文件预览失败: fileName=%s", e, fileName);
+            monitor.end("文件预览失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "文件预览失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+            
+            // 有token的情况，查找用户可访问的文件
+            List<FileUpload> accessibleFiles = documentService.getAccessibleFiles(userId, orgTags);
+            
+            // 根据文件名查找匹配的文件
+            Optional<FileUpload> targetFile = accessibleFiles.stream()
+                    .filter(file -> file.getFileName().equals(fileName))
+                    .findFirst();
+                    
+            if (targetFile.isEmpty()) {
+                LogUtils.logUserOperation(userId, "PREVIEW_FILE_BY_NAME", fileName, "FAILED_NOT_FOUND");
+                monitor.end("预览失败：文件不存在或无权限访问");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.NOT_FOUND.value());
+                response.put("message", "文件不存在或无权限访问");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+            
+            FileUpload file = targetFile.get();
+            
+            // 获取文件预览内容
+            String previewContent = documentService.getFilePreviewContent(file.getFileMd5(), file.getFileName());
+            
+            if (previewContent == null) {
+                LogUtils.logUserOperation(userId, "PREVIEW_FILE_BY_NAME", fileName, "FAILED_GET_CONTENT");
+                monitor.end("预览失败：无法获取文件内容");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+                response.put("message", "无法获取文件预览内容");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+            
+            LogUtils.logFileOperation(userId, "PREVIEW", file.getFileName(), file.getFileMd5(), "SUCCESS");
+            LogUtils.logUserOperation(userId, "PREVIEW_FILE_BY_NAME", fileName, "SUCCESS");
+            monitor.end("文件预览内容获取成功");
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "文件预览内容获取成功");
+            response.put("data", Map.of(
+                "fileName", file.getFileName(),
+                "content", previewContent,
+                "fileSize", file.getTotalSize()
+            ));
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            String userId = "unknown";
+            try {
+                if (token != null && !token.trim().isEmpty()) {
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                }
+            } catch (Exception ignored) {}
+            
+            LogUtils.logBusinessError("PREVIEW_FILE_BY_NAME", userId, "文件预览失败: fileName=%s", e, fileName);
+            monitor.end("预览失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "文件预览失败: " + e.getMessage()); 
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * 根据tagId获取tagName
+     *
+     * @param tagId 组织标签ID
+     * @return 组织标签名称，如果找不到则返回原tagId
+     */
+    private String getOrgTagName(String tagId) {
+        if (tagId == null || tagId.isEmpty()) {
+            return null;
+        }
+
+        try {
+            Optional<OrganizationTag> tagOpt = organizationTagRepository.findByTagId(tagId);
+            if (tagOpt.isPresent()) {
+                return tagOpt.get().getName();
+            } else {
+                LogUtils.logBusiness("GET_ORG_TAG_NAME", "system", "找不到组织标签: tagId=%s", tagId);
+                return tagId; // 如果找不到标签名称，返回原tagId
+            }
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_ORG_TAG_NAME", "system", "查询组织标签名称失败: tagId=%s", e, tagId);
+            return tagId; // 发生错误时返回原tagId
+        }
+    }
+}
+     * @param tagId 组织标签ID
+     * @return 组织标签名称，如果找不到则返回原tagId
+     */
+    private String getOrgTagName(String tagId) {
+        if (tagId == null || tagId.isEmpty()) {
+            return null;
+        }
+
+        try {
+            Optional<OrganizationTag> tagOpt = organizationTagRepository.findByTagId(tagId);
+            if (tagOpt.isPresent()) {
+                return tagOpt.get().getName();
+            } else {
+                LogUtils.logBusiness("GET_ORG_TAG_NAME", "system", "找不到组织标签: tagId=%s", tagId);
+                return tagId; // 如果找不到标签名称，返回原tagId
+            }
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_ORG_TAG_NAME", "system", "查询组织标签名称失败: tagId=%s", e, tagId);
+            return tagId; // 发生错误时返回原tagId
+        }
+    }
+
+    /**
+     * 根据会话ID和引用编号获取文件MD5
+     *
+     * @param sessionId WebSocket会话ID
+     * @param referenceNumber 引用编号
+     * @return 文件MD5和引用编号
+     */
+    @GetMapping("/reference-md5")
+    public ResponseEntity<?> getReferenceMd5(
+            @RequestParam String sessionId,
+            @RequestParam Integer referenceNumber) {
+
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_REFERENCE_MD5");
+        try {
+            LogUtils.logBusiness("GET_REFERENCE_MD5", "system", "接收到获取引用MD5请求: sessionId=%s, referenceNumber=%s", sessionId, referenceNumber);
+
+            // 从ChatHandler获取引用映射
+            String fileMd5 = chatHandler.getReferenceMd5(sessionId, referenceNumber);
+
+            if (fileMd5 == null) {
+                LogUtils.logBusiness("GET_REFERENCE_MD5", "system", "未找到引用映射: sessionId=%s, referenceNumber=%s", sessionId, referenceNumber);
+                monitor.end("未找到引用映射");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.NOT_FOUND.value());
+                response.put("message", "未找到对应的文件引用");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+
+            LogUtils.logBusiness("GET_REFERENCE_MD5", "system", "成功获取引用MD5: fileMd5=%s", fileMd5);
+            monitor.end("获取引用MD5成功");
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "获取引用MD5成功");
+            response.put("data", Map.of(
+                "fileMd5", fileMd5,
+                "referenceNumber", referenceNumber
+            ));
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_REFERENCE_MD5", "system", "获取引用MD5失败: sessionId=%s, referenceNumber=%s", e, sessionId, referenceNumber);
+            monitor.end("获取引用MD5失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "获取引用MD5失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * 根据文件MD5下载文件（精确下载）
+     *
+     * @param fileMd5 文件MD5
+     * @param token JWT token
+     * @return 文件下载链接或错误响应
+     */
+    @GetMapping("/download-by-md5")
+    public ResponseEntity<?> downloadFileByMd5(
+            @RequestParam String fileMd5,
+            @RequestParam(required = false) String token) {
+
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("DOWNLOAD_FILE_BY_MD5");
+        try {
+            // 验证token并获取用户信息
+            String userId = null;
+            String orgTags = null;
+
+            if (token != null && !token.trim().isEmpty()) {
+                try {
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                    orgTags = jwtUtils.extractOrgTagsFromToken(token);
+                } catch (Exception e) {
+                    LogUtils.logBusiness("DOWNLOAD_FILE_BY_MD5", "anonymous", "Token解析失败: fileMd5=%s", fileMd5);
+                }
+            }
+
+            LogUtils.logBusiness("DOWNLOAD_FILE_BY_MD5", userId != null ? userId : "anonymous", "接收到文件下载请求: fileMd5=%s", fileMd5);
+
+            // 如果没有提供token或token无效，只允许下载公开文件
+            if (userId == null) {
+                Optional<FileUpload> publicFile = fileUploadRepository.findByFileMd5AndIsPublicTrue(fileMd5);
+                if (publicFile.isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("code", HttpStatus.NOT_FOUND.value());
+                    response.put("message", "文件不存在或需要登录访问");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                }
+
+                FileUpload file = publicFile.get();
+                String downloadUrl = documentService.generateDownloadUrl(file.getFileMd5());
+
+                if (downloadUrl == null) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+                    response.put("message", "无法生成下载链接");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                }
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", 200);
+                response.put("message", "文件下载链接生成成功");
+                response.put("data", Map.of(
+                    "fileName", file.getFileName(),
+                    "downloadUrl", downloadUrl,
+                    "fileSize", file.getTotalSize(),
+                    "fileMd5", file.getFileMd5()
+                ));
+                return ResponseEntity.ok(response);
+            }
+
+            // 有token的情况，查找用户可访问的文件
+            List<FileUpload> accessibleFiles = documentService.getAccessibleFiles(userId, orgTags);
+
+            // 根据MD5查找匹配的文件
+            Optional<FileUpload> targetFile = accessibleFiles.stream()
+                    .filter(file -> file.getFileMd5().equals(fileMd5))
+                    .findFirst();
+
+            if (targetFile.isEmpty()) {
+                LogUtils.logUserOperation(userId, "DOWNLOAD_FILE_BY_MD5", fileMd5, "FAILED_NOT_FOUND");
+                monitor.end("下载失败：文件不存在或无权限访问");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.NOT_FOUND.value());
+                response.put("message", "文件不存在或无权限访问");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+
+            FileUpload file = targetFile.get();
+
+            // 生成下载链接或返回预签名URL
+            String downloadUrl = documentService.generateDownloadUrl(file.getFileMd5());
+
+            if (downloadUrl == null) {
+                LogUtils.logUserOperation(userId, "DOWNLOAD_FILE_BY_MD5", fileMd5, "FAILED_GENERATE_URL");
+                monitor.end("下载失败：无法生成下载链接");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+                response.put("message", "无法生成下载链接");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+
+            LogUtils.logFileOperation(userId, "DOWNLOAD", file.getFileName(), file.getFileMd5(), "SUCCESS");
+            LogUtils.logUserOperation(userId, "DOWNLOAD_FILE_BY_MD5", fileMd5, "SUCCESS");
+            monitor.end("文件下载链接生成成功");
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "文件下载链接生成成功");
+            response.put("data", Map.of(
+                "fileName", file.getFileName(),
+                "downloadUrl", downloadUrl,
+                "fileSize", file.getTotalSize(),
+                "fileMd5", file.getFileMd5()
+            ));
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            String userId = "unknown";
+            try {
+                if (token != null && !token.trim().isEmpty()) {
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                }
+            } catch (Exception ignored) {}
+
+            LogUtils.logBusinessError("DOWNLOAD_FILE_BY_MD5", userId, "文件下载失败: fileMd5=%s", e, fileMd5);
+            monitor.end("下载失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "文件下载失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+} 

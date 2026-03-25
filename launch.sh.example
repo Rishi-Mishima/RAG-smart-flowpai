@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+
+# 加载 .env 文件中的环境变量
+load_env() {
+    local ENV_FILE=".env"
+
+    # 如果指定了环境文件路径，使用指定的；否则使用默认的 .env
+    if [ -n "$1" ]; then
+        ENV_FILE="$1"
+    fi
+
+    if [ ! -f "$ENV_FILE" ]; then
+        echo "警告：环境变量文件 $ENV_FILE 不存在，将使用默认配置"
+        return 1
+    fi
+
+    echo "正在加载环境变量：$ENV_FILE"
+
+    # 读取 .env 文件并导出环境变量
+    # 跳过注释行和空行
+    while IFS= read -r line || [ -n "$line" ]; do
+        # 跳过注释和空行
+        if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "${line// }" ]]; then
+            continue
+        fi
+
+        # 移除可能的 Windows 换行符
+        line=$(echo "$line" | tr -d '\r')
+
+        # 提取变量名和值
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            var_name="${BASH_REMATCH[1]}"
+            var_value="${BASH_REMATCH[2]}"
+
+            # 移除值两边的引号（如果存在）
+            var_value="${var_value%\"}"
+            var_value="${var_value#\"}"
+            var_value="${var_value%\'}"
+            var_value="${var_value#\'}"
+
+            # 导出环境变量
+            export "$var_name=$var_value"
+            echo "  ✓ $var_name"
+        fi
+    done < "$ENV_FILE"
+
+    echo "环境变量加载完成"
+    echo ""
+}
+
+# 配置 jdk17
+export JAVA_HOME=/usr/lib/jvm/java-17
+export PATH=$JAVA_HOME/bin:$PATH
+export MVN_HOME=/root/soft/apache-maven-3.9.11
+
+JAR_NAME="SmartPAI-0.0.1-SNAPSHOT.jar"
+
+# 部署
+function start() {
+    git pull
+
+    # 杀掉之前的进程
+    if [ -f pid.log ]; then
+        cat pid.log | xargs -I {} kill {} 2>/dev/null || true
+        sleep 2
+    fi
+
+    mv ${JAR_NAME} ${JAR_NAME}.bak 2>/dev/null || true
+
+    ${MVN_HOME}/bin/mvn clean package spring-boot:repackage -DskipTests=true
+
+    mv target/${JAR_NAME} ./
+    run
+}
+
+# 重启
+function restart() {
+    # 杀掉之前的进程
+    if [ -f pid.log ]; then
+        cat pid.log | xargs -I {} kill {} 2>/dev/null || true
+        sleep 2
+    fi
+    # 重新启动
+    run
+}
+
+function run() {
+  echo "启动脚本：==========="
+  echo "当前 Profile: ${SPRING_PROFILES_ACTIVE:-prod}"
+  echo "Java 版本：$($JAVA_HOME/bin/java -version 2>&1 | head -n 1)"
+  echo "JVM 参数：-Xms${JAVA_XMS:-1g} -Xmx${JAVA_XMX:-1g}"
+  echo "==========="
+
+  # ms 堆大小  mx 最大堆大小  mn 新生代大小
+  nohup $JAVA_HOME/bin/java \
+    -server \
+    -Dspring.devtools.restart.enabled=false \
+    -Xms${JAVA_XMS:-1g} \
+    -Xmx${JAVA_XMX:-1g} \
+    -Xmn${JAVA_XMN:-256m} \
+    -XX:NativeMemoryTracking=detail \
+    -XX:-OmitStackTraceInFastThrow \
+    -jar ${JAR_NAME} > /dev/null 2>&1 &
+
+  echo $! 1> pid.log
+  echo "应用已启动，PID: $(cat pid.log)"
+}
+
+# 显示帮助信息
+function show_help() {
+    echo "用法：$0 [命令] [选项]"
+    echo ""
+    echo "命令:"
+    echo "  start       从源码编译并启动应用（会先执行 git pull）"
+    echo "  restart     重启已编译的应用"
+    echo "  stop        停止运行中的应用"
+    echo "  status      查看应用运行状态"
+    echo "  logs        查看应用日志（tail -f）"
+    echo ""
+    echo "选项:"
+    echo "  -e, --env   指定 .env 文件路径，默认为 ./.env"
+    echo "  -h, --help  显示帮助信息"
+    echo ""
+    echo "示例:"
+    echo "  $0 start                    # 使用默认 .env 启动"
+    echo "  $0 start -e .env.prod       # 使用生产环境配置启动"
+    echo "  $0 restart                  # 重启应用"
+    echo "  $0 stop                     # 停止应用"
+    echo ""
+}
+
+# 停止应用
+function stop() {
+    if [ ! -f pid.log ]; then
+        echo "未找到 PID 文件，应用可能未运行"
+        return 1
+    fi
+
+    local pid=$(cat pid.log)
+    if ps -p $pid > /dev/null 2>&1; then
+        echo "正在停止应用 (PID: $pid)..."
+        kill $pid
+        sleep 3
+
+        # 如果还在运行，强制杀死
+        if ps -p $pid > /dev/null 2>&1; then
+            echo "应用未响应，强制终止..."
+            kill -9 $pid
+        fi
+
+        rm -f pid.log
+        echo "应用已停止"
+    else
+        echo "应用未运行（PID $pid 不存在）"
+        rm -f pid.log
+    fi
+}
+
+# 查看状态
+function status() {
+    if [ ! -f pid.log ]; then
+        echo "应用未运行（无 PID 文件）"
+        return 1
+    fi
+
+    local pid=$(cat pid.log)
+    if ps -p $pid > /dev/null 2>&1; then
+        echo "应用运行中 (PID: $pid)"
+        echo ""
+        echo "=== 进程信息 ==="
+        ps -p $pid -o pid,ppid,user,%cpu,%mem,etime,start,time,cmd
+        echo ""
+        echo "=== 最近日志 ==="
+        tail -n 20 nohup.out 2>/dev/null || echo "无日志文件"
+    else
+        echo "应用未运行（PID $pid 不存在）"
+        rm -f pid.log
+        return 1
+    fi
+}
+
+# 查看日志
+function logs() {
+    if [ -f nohup.out ]; then
+        tail -f nohup.out
+    else
+        echo "日志文件不存在"
+        return 1
+    fi
+}
+
+# 主程序入口
+if [ $# == 0 ]; then
+    show_help
+    exit 1
+fi
+
+# 解析命令行参数
+ENV_FILE=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -e|--env)
+            ENV_FILE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+COMMAND=$1
+
+# 加载环境变量（除了 help 和 stop 命令）
+if [[ "$COMMAND" != "stop" && "$COMMAND" != "status" && "$COMMAND" != "logs" && "$COMMAND" != "-h" && "$COMMAND" != "--help" ]]; then
+    load_env "$ENV_FILE"
+fi
+
+# 执行命令
+case $COMMAND in
+    start)
+        start
+        ;;
+    restart)
+        restart
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status
+        ;;
+    logs)
+        logs
+        ;;
+    *)
+        echo "错误：未知的命令 '$COMMAND'"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac

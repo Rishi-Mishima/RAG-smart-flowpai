@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPAI API 测试页面</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --primary-hover: #45a049;
+            --error-color: #dc3545;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --bg-color: #f4f7fa;
+            --text-color: #333;
+            --border-color: #ddd;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 20px;
+        }
+
+        .sidebar {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .main-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .nav-item {
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-item:hover {
+            background-color: var(--bg-color);
+        }
+
+        .nav-item.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .section {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        h1, h2, h3 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="file"],
+        input[type="datetime-local"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 10px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .response {
+            margin-top: 10px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .error {
+            border-left-color: var(--error-color);
+            background-color: #fff5f5;
+        }
+
+        .success {
+            border-left-color: var(--success-color);
+            background-color: #f0fff4;
+        }
+
+        .chat-container {
+            height: 400px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .chat-input input {
+            flex-grow: 1;
+            margin-right: 10px;
+            margin-bottom: 0;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .message.user {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+            color: #333;
+        }
+
+        .message.assistant {
+            background-color: #f5f5f5;
+            margin-right: 20%;
+            color: #333;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .status-indicator.online {
+            background-color: var(--success-color);
+        }
+
+        .status-indicator.offline {
+            background-color: var(--error-color);
+        }
+
+        .file-upload-progress {
+            width: 100%;
+            height: 4px;
+            background-color: var(--border-color);
+            border-radius: 2px;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 2px;
+            width: 0;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>功能导航</h2>
+            <div class="nav-item active" onclick="showSection('auth')">用户认证</div>
+            <div class="nav-item" onclick="showSection('chat')">智能对话</div>
+            <div class="nav-item" onclick="showSection('file')">文件管理</div>
+            <div class="nav-item" onclick="showSection('history')">对话历史</div>
+            <div class="nav-item admin-only" onclick="showSection('admin')">管理功能</div>
+            <div class="connection-status">
+                <span class="status-indicator offline"></span>
+                <span>未连接</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- 用户认证部分 -->
+            <div id="auth" class="section active">
+                <h2>用户认证</h2>
+                <div class="form-group">
+                    <label>用户名：</label>
+                    <input type="text" id="username" placeholder="请输入用户名" />
+                </div>
+                <div class="form-group">
+                    <label>密码：</label>
+                    <input type="password" id="password" placeholder="请输入密码" />
+                </div>
+                <button onclick="register()">注册</button>
+                <button onclick="login()">登录</button>
+                <div id="auth-response" class="response"></div>
+            </div>
+
+            <!-- 智能对话部分 -->
+            <div id="chat" class="section">
+                <h2>智能对话</h2>
+                <div class="chat-container">
+                    <div id="chat-messages" class="chat-messages"></div>
+                    <div class="chat-input">
+                        <input type="text" id="message-input" placeholder="输入您的问题..." onkeypress="handleKeyPress(event)" />
+                        <button onclick="sendMessage()">发送</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文件管理部分 -->
+            <div id="file" class="section">
+                <h2>文件管理</h2>
+                <div class="form-group">
+                    <label>选择文件：</label>
+                    <input type="file" id="upload-file" />
+                    <div class="file-upload-progress">
+                        <div class="progress-bar" id="upload-progress"></div>
+                    </div>
+                    <button onclick="uploadFile()">上传文件</button>
+                </div>
+                <div id="upload-response" class="response"></div>
+            </div>
+
+            <!-- 对话历史部分 -->
+            <div id="history" class="section">
+                <h2>对话历史</h2>
+                <div class="form-group">
+                    <label>开始日期：</label>
+                    <input type="datetime-local" id="start-date" />
+                </div>
+                <div class="form-group">
+                    <label>结束日期：</label>
+                    <input type="datetime-local" id="end-date" />
+                </div>
+                <button onclick="getConversations()">查询历史</button>
+                <div id="history-response" class="response"></div>
+            </div>
+
+            <!-- 管理功能部分 -->
+            <div id="admin" class="section">
+                <h2>管理功能</h2>
+                <div class="form-group">
+                    <h3>用户管理</h3>
+                    <button onclick="getAllUsers()">获取所有用户</button>
+                    <div id="users-response" class="response"></div>
+                </div>
+
+                <div class="form-group">
+                    <h3>创建管理员</h3>
+                    <input type="text" id="admin-username" placeholder="管理员用户名" />
+                    <input type="password" id="admin-password" placeholder="管理员密码" />
+                    <button onclick="createAdmin()">创建管理员</button>
+                    <div id="create-admin-response" class="response"></div>
+                </div>
+
+                <div class="form-group">
+                    <h3>系统状态</h3>
+                    <button onclick="getSystemStatus()">获取系统状态</button>
+                    <div id="status-response" class="response"></div>
+                </div>
+
+                <div class="form-group">
+                    <h3>用户活动</h3>
+                    <input type="text" id="target-username" placeholder="目标用户名（可选）" />
+                    <input type="datetime-local" id="activity-start-date" />
+                    <input type="datetime-local" id="activity-end-date" />
+                    <button onclick="getUserActivities()">获取活动记录</button>
+                    <div id="activities-response" class="response"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('token');
+        let isAdmin = false;
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        let intentionalClosure = false;
+        let currentAssistantMessage = '';
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUI();
+            if (token) {
+                initializeWebSocket();
+                checkAdminStatus();
+            }
+        });
+
+        // 显示/隐藏相应的部分
+        function updateUI() {
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            if (!token) {
+                document.getElementById('auth').classList.add('active');
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+            } else {
+                document.getElementById('chat').classList.add('active');
+                if (isAdmin) {
+                    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+                }
+            }
+        }
+
+        // 切换显示的部分
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.getElementById(sectionId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // WebSocket相关函数
+        function initializeWebSocket() {
+            if (ws) {
+                intentionalClosure = true;  // 标记这是主动关闭
+                ws.close();
+                intentionalClosure = false;
+            }
+
+            ws = new WebSocket(`ws://localhost:8081/chat/${token}`);
+            
+            ws.onopen = function() {
+                console.log('WebSocket连接已建立');
+                updateConnectionStatus(true);
+                reconnectAttempts = 0;
+            };
+
+            ws.onclose = function(event) {
+                updateConnectionStatus(false);
+                currentAssistantMessage = '';
+                
+                // 只有在非主动关闭且不是正常关闭的情况下才重连
+                if (!intentionalClosure && event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+                    const timeout = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                    console.log(`连接已关闭，${timeout/1000}秒后重试...`);
+                    setTimeout(() => {
+                        reconnectAttempts++;
+                        initializeWebSocket();
+                    }, timeout);
+                }
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket错误:', error);
+                updateConnectionStatus(false);
+                currentAssistantMessage = '';
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const response = JSON.parse(event.data);
+                    
+                    // 如果是流式响应
+                    if (response.chunk) {
+                        // 如果是新消息的开始，创建新的消息div
+                        if (currentAssistantMessage === '') {
+                            currentAssistantMessage = response.chunk;
+                            appendMessage('assistant', currentAssistantMessage, true);
+                        } else {
+                            // 追加到现有消息
+                            currentAssistantMessage += response.chunk;
+                            updateLastMessage(currentAssistantMessage);
+                        }
+                    } else {
+                        // 处理非流式响应
+                        let message = response.message || response.error || response;
+                        if (typeof message === 'string') {
+                            appendMessage('assistant', message);
+                        } else if (typeof message === 'object') {
+                            appendMessage('assistant', JSON.stringify(message, null, 2));
+                        }
+                    }
+                } catch (error) {
+                    console.error('消息处理错误:', error);
+                    appendMessage('assistant', '消息处理出错，请重试');
+                }
+            };
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const indicator = document.querySelector('.status-indicator');
+            const statusText = document.querySelector('.connection-status span:last-child');
+            
+            if (isConnected) {
+                indicator.classList.remove('offline');
+                indicator.classList.add('online');
+                statusText.textContent = '已连接';
+            } else {
+                indicator.classList.remove('online');
+                indicator.classList.add('offline');
+                statusText.textContent = '未连接';
+            }
+        }
+
+        // 发送消息
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (!message) {
+                return;
+            }
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                showResponse('chat-response', 'WebSocket未连接，请等待重连...', false);
+                return;
+            }
+
+            try {
+                appendMessage('user', message);
+                // 发送消息前确保是纯文本
+                ws.send(message.replace(/[\u0000-\u001F\u007F-\u009F]/g, ''));
+                input.value = '';
+            } catch (error) {
+                console.error('发送消息失败:', error);
+                showResponse('chat-response', '发送消息失败，请重试', false);
+            }
+        }
+
+        // 处理回车键
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // 添加消息到聊天框
+        function appendMessage(sender, content, isStream = false) {
+            const messagesDiv = document.getElementById('chat-messages');
+            
+            // 如果不是流式消息，重置currentAssistantMessage
+            if (!isStream) {
+                currentAssistantMessage = '';
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            // 处理消息内容
+            if (typeof content === 'string') {
+                content = content.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+                content = content.replace(/\n/g, '<br>');
+                messageDiv.innerHTML = content;
+            } else if (content.message) {
+                messageDiv.innerHTML = content.message.replace(/\n/g, '<br>');
+            } else {
+                messageDiv.innerHTML = JSON.stringify(content, null, 2).replace(/\n/g, '<br>');
+            }
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // 检查管理员状态
+        async function checkAdminStatus() {
+            try {
+                const response = await fetch('/api/v1/users/me', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const data = await response.json();
+                isAdmin = data.data.role === 'ADMIN';
+                updateUI();
+            } catch (error) {
+                console.error('获取用户信息失败:', error);
+            }
+        }
+
+        // 注册
+        async function register() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/v1/users/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                showResponse('auth-response', data.message, response.ok);
+            } catch (error) {
+                showResponse('auth-response', `注册失败: ${error.message}`, false);
+            }
+        }
+
+        // 登录
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/v1/users/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    token = data.data.token;
+                    localStorage.setItem('token', token);
+                    await checkAdminStatus();
+                    initializeWebSocket();
+                    showResponse('auth-response', '登录成功', true);
+                    updateUI();
+                } else {
+                    showResponse('auth-response', data.message, false);
+                }
+            } catch (error) {
+                showResponse('auth-response', `登录失败: ${error.message}`, false);
+            }
+        }
+
+        // 修改计算 MD5 的函数
+        async function calculateMD5(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = e.target.result;
+                        const spark = new SparkMD5.ArrayBuffer();
+                        spark.append(data);
+                        const md5 = spark.end();
+                        resolve(md5);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // 添加合并分片的函数
+        async function mergeChunks(fileMD5, fileName) {
+            console.log(`开始合并文件分片: fileMD5=${fileMD5}, fileName=${fileName}`);
+            return new Promise((resolve, reject) => {
+                fetch('/api/v1/upload/merge', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        fileMd5: fileMD5,
+                        fileName: fileName
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            console.error(`合并文件失败: HTTP状态码=${response.status}, 错误信息=`, data);
+                            throw new Error(data.error || `合并文件失败: ${response.status} ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('文件合并成功:', data);
+                    resolve(data);
+                })
+                .catch(error => {
+                    console.error('文件合并过程中出错:', error);
+                    reject(error);
+                });
+            });
+        }
+
+        // 添加文件分片处理函数
+        async function uploadFileInChunks(file) {
+            const chunkSize = 5 * 1024 * 1024; // 5MB per chunk
+            const totalChunks = Math.ceil(file.size / chunkSize);
+            const fileMD5 = await calculateMD5(file);
+            const progressBar = document.getElementById('upload-progress');
+            
+            showResponse('upload-response', `开始上传文件，共${totalChunks}个分片...`, true);
+            
+            for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                const start = chunkIndex * chunkSize;
+                const end = Math.min(start + chunkSize, file.size);
+                const chunk = file.slice(start, end);
+                
+                try {
+                    await uploadChunk(chunk, {
+                        fileMD5,
+                        fileName: file.name,
+                        totalSize: file.size,
+                        chunkIndex,
+                        totalChunks
+                    });
+                    
+                    // 更新进度条
+                    const progress = ((chunkIndex + 1) / totalChunks) * 100;
+                    progressBar.style.width = progress + '%';
+                    showResponse('upload-response', `上传进度: ${Math.round(progress)}%`, true);
+                    
+                } catch (error) {
+                    progressBar.style.width = '0%';
+                    showResponse('upload-response', `${error.message}`, false);
+                    throw error;
+                }
+            }
+            
+            // 所有分片上传完成后，调用合并接口
+            showResponse('upload-response', '所有分片上传完成，开始合并文件...', true);
+            const mergeResult = await mergeChunks(fileMD5, file.name);
+            return mergeResult.object_url;
+        }
+
+        // 添加单个分片上传函数
+        function uploadChunk(chunk, metadata) {
+            return new Promise((resolve, reject) => {
+                const formData = new FormData();
+                formData.append('file', chunk);
+                
+                const xhr = new XMLHttpRequest();
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        resolve();
+                    } else {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            reject(new Error(response.error || response.message || '未知错误'));
+                        } catch (e) {
+                            reject(new Error(`请求失败: ${xhr.status} ${xhr.statusText}`));
+                        }
+                    }
+                };
+                
+                xhr.onerror = () => reject(new Error('网络错误'));
+                
+                xhr.open('POST', '/api/v1/upload/chunk', true);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.setRequestHeader('X-File-MD5', metadata.fileMD5);
+                xhr.setRequestHeader('X-Chunk-Index', metadata.chunkIndex.toString());
+                xhr.setRequestHeader('X-Total-Chunks', metadata.totalChunks.toString());
+                xhr.setRequestHeader('X-Total-Size', metadata.totalSize.toString());
+                xhr.setRequestHeader('X-File-Name', encodeURIComponent(metadata.fileName));
+                
+                xhr.send(formData);
+            });
+        }
+
+        // 修改文件上传主函数
+        async function uploadFile() {
+            const fileInput = document.getElementById('upload-file');
+            const file = fileInput.files[0];
+            const progressBar = document.getElementById('upload-progress');
+            
+            if (!file) {
+                showResponse('upload-response', '请选择文件', false);
+                return;
+            }
+            
+            try {
+                const fileUrl = await uploadFileInChunks(file);
+                showResponse('upload-response', `文件上传并处理成功，可以通过以下链接访问：<br><a href="${fileUrl}" target="_blank">${fileUrl}</a>`, true);
+                fileInput.value = '';
+                progressBar.style.width = '0%';
+            } catch (error) {
+                console.error('上传失败:', error);
+                const errorMessage = error.message.toLowerCase().includes('上传失败') || 
+                                    error.message.toLowerCase().includes('failed') ? 
+                                    error.message : `上传失败: ${error.message}`;
+                showResponse('upload-response', errorMessage, false);
+                progressBar.style.width = '0%';
+            }
+        }
+
+        // 获取对话历史
+        async function getConversations() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            try {
+                const response = await fetch(`/api/v1/users/conversations?start_date=${startDate}&end_date=${endDate}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('history-response').innerHTML = 
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                showResponse('history-response', `获取对话历史失败: ${error.message}`, false);
+            }
+        }
+
+        // 获取所有用户
+        async function getAllUsers() {
+            try {
+                const response = await fetch('/api/v1/admin/users', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('users-response').innerHTML = 
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                showResponse('users-response', `获取用户列表失败: ${error.message}`, false);
+            }
+        }
+
+        // 创建管理员
+        async function createAdmin() {
+            const username = document.getElementById('admin-username').value;
+            const password = document.getElementById('admin-password').value;
+            
+            try {
+                const response = await fetch('/api/v1/admin/users/create-admin', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                showResponse('create-admin-response', data.message, response.ok);
+            } catch (error) {
+                showResponse('create-admin-response', `创建管理员失败: ${error.message}`, false);
+            }
+        }
+
+        // 获取系统状态
+        async function getSystemStatus() {
+            try {
+                const response = await fetch('/api/v1/admin/system/status', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('status-response').innerHTML = 
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                showResponse('status-response', `获取系统状态失败: ${error.message}`, false);
+            }
+        }
+
+        // 获取用户活动
+        async function getUserActivities() {
+            const username = document.getElementById('target-username').value;
+            const startDate = document.getElementById('activity-start-date').value;
+            const endDate = document.getElementById('activity-end-date').value;
+            
+            let url = '/api/v1/admin/user-activities?';
+            if (username) url += `username=${username}&`;
+            if (startDate) url += `start_date=${startDate}&`;
+            if (endDate) url += `end_date=${endDate}`;
+
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('activities-response').innerHTML = 
+                    `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                showResponse('activities-response', `获取用户活动失败: ${error.message}`, false);
+            }
+        }
+
+        // 修改显示响应信息的函数，添加加载状态的处理
+        function showResponse(elementId, message, isSuccess) {
+            const element = document.getElementById(elementId);
+            const className = isSuccess ? 'success' : 'error';
+            element.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+
+        // 在页面关闭时主动断开连接
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                intentionalClosure = true;
+                ws.close();
+            }
+        });
+
+        function updateLastMessage(content) {
+            const messagesDiv = document.getElementById('chat-messages');
+            const lastMessage = messagesDiv.lastElementChild;
+            if (lastMessage) {
+                // 处理消息内容
+                content = content.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+                content = content.replace(/\n/g, '<br>');
+                lastMessage.innerHTML = content;
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,83 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:paismart;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: file-processing-group
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+    topic:
+      file-processing: file-processing-topic1
+      dlt: file-processing-dlt
+
+admin:
+  bootstrap:
+    enabled: false
+
+knowledge:
+  bootstrap:
+    enabled: false
+
+jwt:
+  secret-key: bXlfc2VjdXJlX2tleV8xMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc=
+
+minio:
+  endpoint: http://localhost:9000
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucketName: test-bucket
+  publicUrl: http://localhost:9000
+
+file:
+  parsing:
+    chunk-size: 512
+    parent-chunk-size: 1048576
+    buffer-size: 8192
+    max-memory-threshold: 0.8
+
+elasticsearch:
+  host: localhost
+  port: 9200
+  scheme: http
+  username: elastic
+  password: changeme
+  insecure-trust-all-certificates: true
+  init:
+    enabled: false
+
+security:
+  allowed-origins: http://localhost:3000
+
+logging:
+  level:
+    org.springframework: WARN
+    com.yizhaoqi.smartpai: INFO
+
+deepseek:
+  api:
+    url: http://localhost:11434/v1
+    model: deepseek-chat
+    key:
+
+embedding:
+  api:
+    url: http://localhost:8000
+    key:
+    model: text-embedding-v4

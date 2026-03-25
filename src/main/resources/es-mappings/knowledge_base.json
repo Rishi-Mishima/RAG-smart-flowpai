@@ -1,0 +1,42 @@
+{
+  "mappings": {
+    "properties": {
+      "fileMd5": {
+        "type": "keyword"
+      },
+      "chunkId": {
+        "type": "integer"
+      },
+      "pageNumber": {
+        "type": "integer"
+      },
+      "anchorText": {
+        "type": "text",
+        "index": false
+      },
+      "textContent": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "vector": {
+        "type": "dense_vector",
+        "dims": 2048,
+        "index": true,
+        "similarity": "cosine"
+      },
+      "modelVersion": {
+        "type": "keyword"
+      },
+      "userId": {
+        "type": "keyword"
+      },
+      "orgTag": {
+        "type": "keyword"
+      },
+      "isPublic": {
+        "type": "boolean"
+      }
+    }
+  }
+}
