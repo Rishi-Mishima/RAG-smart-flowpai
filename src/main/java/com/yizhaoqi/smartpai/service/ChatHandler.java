@@ -132,6 +132,7 @@ public class ChatHandler {
         try {
             chatMonitorExecutor.execute(() -> {
                 try {
+                    //step1: 给模型一点时间开始输出
                     Thread.sleep(3000);
                     StringBuilder responseBuilder = responseBuilders.get(session.getId());
                     if (responseBuilder == null) {
@@ -141,14 +142,20 @@ public class ChatHandler {
                         cleanupSessionState(session.getId(), exception);
                         return;
                     }
-
+                    // step 2: 获取当前长度
                     int lastLength = responseBuilder.length();
+                    //Step 3: 再等一会
                     Thread.sleep(2000);
+
+                    //Step 4: 判断是否还在增长
+                    //如果长度没变：说明模型不再输出了 → 结束
                     if (responseBuilder.length() == lastLength) {
                         finalizeResponse(userId, userMessage, conversationId, session, responseFuture, responseBuilder);
                         return;
                     }
 
+                    //Step 5：多轮检测（兜底）
+                    //最多检查几轮，避免误判
                     for (int i = 0; i < 5; i++) {
                         Thread.sleep(5000);
                         lastLength = responseBuilder.length();
@@ -159,6 +166,7 @@ public class ChatHandler {
                         }
                     }
 
+                    // step 6: 最终收尾
                     if (!responseFuture.isDone()) {
                         finalizeResponse(userId, userMessage, conversationId, session, responseFuture, responseBuilder);
                     }
@@ -177,11 +185,17 @@ public class ChatHandler {
 
     private void finalizeResponse(String userId, String userMessage, String conversationId, WebSocketSession session,
                                   CompletableFuture<String> responseFuture, StringBuilder responseBuilder) {
+
+        //1. 拼完整结果
         String completeResponse = responseBuilder.toString();
+        //2. 标记完成
         responseFuture.complete(completeResponse);
+        //3. 通知前端结束
         sendCompletionNotification(session);
+        //存 Redis（聊天记录）
         updateConversationHistory(conversationId, userMessage, completeResponse, sessionReferenceMappings.get(session.getId()));
         logger.info("对话存储信息 - Redis键: {}, 值: {}", "user:" + userId + ":current_conversation", conversationId);
+        //清理状态
         cleanupSessionState(session.getId(), null);
         logger.info("消息处理完成，用户ID: {}", userId);
     }
