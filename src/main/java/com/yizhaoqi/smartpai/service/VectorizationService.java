@@ -69,6 +69,14 @@ public class VectorizationService {
             );
             List<float[]> vectors = embeddingResult.vectors();
 
+            //校验长度
+            if (vectors.size() != chunks.size()) {
+                logger.error("embedding 数量不匹配, chunks: {}, vectors: {}",
+                        chunks.size(), vectors.size());
+
+                throw new IllegalStateException("Embedding result size mismatch");
+            }
+
             // 构建 Elasticsearch 文档并存储
             List<EsDocument> esDocuments = IntStream.range(0, chunks.size())
                     .mapToObj(i -> new EsDocument(
