@@ -69,13 +69,18 @@ public class ParseService {
      * @throws IOException   如果文件读取过程中发生错误
      * @throws TikaException 如果文件解析过程中发生错误
      */
+
+    // parseAndSave = the main entry point of the parsing pipeline.
     public void parseAndSave(String fileMd5, InputStream fileStream,
             String userId, String orgTag, boolean isPublic) throws IOException, TikaException {
         logger.info("开始流式解析文件，fileMd5: {}, userId: {}, orgTag: {}, isPublic: {}",
                 fileMd5, userId, orgTag, isPublic);
-        
+
+        //检查内存
         checkMemoryThreshold();
 
+        //BufferedInputStream  - > 缓冲流比直接读原始流更快。
+        // pdf 和 非 PDF 需要分开
         try (BufferedInputStream bufferedStream = new BufferedInputStream(fileStream, bufferSize)) {
             if (isPdfDocument(bufferedStream)) {
                 parsePdfAndSave(fileMd5, bufferedStream, userId, orgTag, isPublic);
@@ -87,6 +92,7 @@ public class ParseService {
             StreamingContentHandler handler = new StreamingContentHandler(fileMd5, userId, orgTag, isPublic);
             Metadata metadata = new Metadata();
             ParseContext context = new ParseContext();
+            //TIKA
             AutoDetectParser parser = new AutoDetectParser();
 
             // Tika的parse方法会驱动整个流式处理过程
@@ -167,6 +173,9 @@ public class ParseService {
         private final boolean isPublic;
         private int savedChunkCount = 0;
 
+        // 非PDF的线
+        //非 PDF 文件不会整篇一次性塞进内存，而是交给 StreamingContentHandler
+        //这个类继承自 BodyContentHandler
         public StreamingContentHandler(String fileMd5, String userId, String orgTag, boolean isPublic) {
             super(-1); // 禁用Tika的内部写入限制，我们自己管理缓冲区
             this.fileMd5 = fileMd5;
@@ -275,10 +284,12 @@ public class ParseService {
         return currentChunkId;
     }
 
+    //PDF 方法
     private void parsePdfAndSave(String fileMd5, InputStream fileStream, String userId, String orgTag, boolean isPublic) throws IOException {
         try (PDDocument document = PDDocument.load(fileStream)) {
             int savedChunkCount = 0;
 
+            // Step 1 : 提取并清洗每一页文本
             List<String> cleanedPageTexts = extractCleanPdfPageTexts(document);
             for (int pageNumber = 1; pageNumber <= cleanedPageTexts.size(); pageNumber++) {
                 String pageText = cleanedPageTexts.get(pageNumber - 1);
@@ -286,6 +297,7 @@ public class ParseService {
                     continue;
                 }
 
+            // Step 2: 每一页再做语义切分
                 List<String> childChunks = splitTextIntoChunksWithSemantics(pageText, chunkSize);
                 savedChunkCount = saveChildChunks(fileMd5, childChunks, userId, orgTag, isPublic, savedChunkCount, pageNumber);
             }
@@ -312,7 +324,9 @@ public class ParseService {
         }
     }
 
+    //清洗 PDF
     private List<String> extractCleanPdfPageTexts(PDDocument document) throws IOException {
+        //1. 先逐页抽文本
         PDFTextStripper stripper = new PDFTextStripper();
         List<List<String>> rawPageLines = new ArrayList<>();
 
@@ -320,14 +334,18 @@ public class ParseService {
             stripper.setStartPage(pageNumber);
             stripper.setEndPage(pageNumber);
             String pageText = stripper.getText(document);
+            //2. 再按行切开 - >  把一页文本变成很多行。
             rawPageLines.add(splitPdfLines(pageText));
         }
 
+        // 3. 统计重复出现的页边界行
         Map<String, Integer> topLineCounts = collectBoundaryLineCounts(rawPageLines, true);
         Map<String, Integer> bottomLineCounts = collectBoundaryLineCounts(rawPageLines, false);
         int repeatedThreshold = Math.max(2, Math.min(3, document.getNumberOfPages()));
 
         List<String> cleanedPages = new ArrayList<>(rawPageLines.size());
+
+        //4. 4 删掉疑似页眉页脚
         for (int pageIndex = 0; pageIndex < rawPageLines.size(); pageIndex++) {
             List<String> cleanedLines = removePdfBoilerplateLines(
                     rawPageLines.get(pageIndex),
@@ -455,6 +473,12 @@ public class ParseService {
         return cleanedLines;
     }
 
+    // normalizePdfBoundaryLine - 重要!
+    //边界行标准化
+    /** 去空格噪音
+     全部转小写
+     把数字替换成 #
+     **/
     private String normalizePdfBoundaryLine(String line) {
         if (line == null) {
             return null;
