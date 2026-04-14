@@ -18,14 +18,19 @@ import java.util.stream.IntStream;
 @Service
 public class VectorizationService {
 
+    // 日志对象 - 问题排查
     private static final Logger logger = LoggerFactory.getLogger(VectorizationService.class);
 
+    // 依赖注入
+    // 负责调用 embedding 模型，把文本变成向量
     @Autowired
     private EmbeddingClient embeddingClient;
 
+    //负责把向量文档写入 Elasticsearch。 - 最终落库到搜索引擎
     @Autowired
     private ElasticsearchService elasticsearchService;
 
+    //负责从数据库里查出文本分块数据。
     @Autowired
     private DocumentVectorRepository documentVectorRepository;
 
@@ -36,21 +41,32 @@ public class VectorizationService {
      * @param orgTag 组织标签
      * @param isPublic 是否公开
      */
+
+    // 它把 requesterId 默认设成 userId，然后调用真正的方法：vectorizeWithUsage
     public void vectorize(String fileMd5, String userId, String orgTag, boolean isPublic) {
         vectorizeWithUsage(fileMd5, userId, orgTag, isPublic, userId);
     }
+
+    /** 另一种方法重载 - 允许调用方自己指定 requesterId
+     * userId = 文件属于谁
+     * requesterId = 这次调用是谁发起的
+     * 这通常和计费、审计、usage 统计有关。
+     */
 
     public void vectorize(String fileMd5, String userId, String orgTag, boolean isPublic, String requesterId) {
         vectorizeWithUsage(fileMd5, userId, orgTag, isPublic, requesterId);
     }
 
+    //core method
     public VectorizationUsageResult vectorizeWithUsage(String fileMd5, String userId, String orgTag, boolean isPublic, String requesterId) {
         try {
+            //打印日志 - {} 是 slf4j 的占位符，后面的参数会自动填进去。- 性能好,可读性更强,
             logger.info("开始向量化文件，fileMd5: {}, userId: {}, orgTag: {}, isPublic: {}", 
                        fileMd5, userId, orgTag, isPublic);
                        
             // 获取文件分块内容
             List<TextChunk> chunks = fetchTextChunks(fileMd5);
+            // 非空判断 - 因为没有文本块，就没法做 embedding 直接返回
             if (chunks == null || chunks.isEmpty()) {
                 logger.warn("未找到分块内容，fileMd5: {}", fileMd5);
                 return new VectorizationUsageResult(0, 0, embeddingClient.currentModelVersion());
