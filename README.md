@@ -293,27 +293,7 @@ pnpm typecheck
 pnpm build
 ```
 
-## Interview Talking Points
 
-### 30-Second Pitch
-
-RAG Smart FlowPAI is an enterprise knowledge-base Q&A system. After users upload documents, the system stores original files in MinIO, uses Kafka to trigger asynchronous parsing and vectorization, and writes text chunks and embeddings into MySQL and Elasticsearch. When users ask questions, the backend runs permission-aware hybrid retrieval, injects the retrieved evidence into the prompt, and streams LLM answers with citations over WebSocket. The project also includes JWT authentication, organization-based multi-tenancy, Redis rate limiting, token quota accounting, configurable model providers, and an admin console.
-
-### Strong Topics to Expand On
-
-- **Why Kafka is used**: Upload requests only persist files and publish tasks; parsing, embedding, and indexing run in the background so large files do not block HTTP requests. Retry and DLT handling improve reliability.
-- **Why hybrid retrieval is used**: Pure vector search may retrieve semantically close but keyword-inaccurate chunks, while pure BM25 cannot capture deeper semantic similarity. KNN recall + keyword matching + rescore balances both.
-- **How permissions are enforced in retrieval**: The system does not retrieve everything and filter in Java. It pushes `userId`, `public`, and `orgTag` filters into the Elasticsearch query to reduce access risk and unnecessary data transfer.
-- **How streaming chat is persisted**: Each model chunk is pushed to the frontend immediately, while the backend accumulates the full response and writes it to Redis after completion.
-- **How usage quota is controlled**: Before LLM or Embedding calls, the system estimates tokens and reserves quota. Successful calls are settled with actual usage, and failed calls roll back the reservation.
-
-### Future Improvements
-
-- Add a reranker or Cross Encoder to improve TopK evidence ranking.
-- Use a parent-child chunk retrieval strategy for long documents: small chunks for recall, larger parent context for generation.
-- Add an observable processing-status table for Kafka tasks so the frontend can show parsing progress, failure reasons, and retry states.
-- Introduce Elasticsearch index aliases and migration flow to reduce mapping upgrade risk.
-- Replace timer-based WebSocket completion detection with explicit model stream completion events.
 
 ## Project Structure
 
