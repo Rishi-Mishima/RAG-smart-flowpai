@@ -1,69 +1,69 @@
 # RAG Smart FlowPAI
 
-> 一个面向企业知识库场景的全栈 RAG 问答系统。项目覆盖文档上传、异步解析、向量化索引、混合检索、权限隔离、流式 AI 对话、用量计费与后台管理等完整链路，适合作为 Java 后端 / 全栈方向面试项目展示。
+> A full-stack Retrieval-Augmented Generation system for enterprise knowledge-base scenarios. It covers the complete workflow from document upload, asynchronous parsing, vector indexing, hybrid retrieval, permission isolation, streaming AI chat, usage metering, and admin operations. This project is well suited for Java backend or full-stack engineering interview discussions.
 
-## 项目亮点
+## Highlights
 
-- **完整 RAG 闭环**：文档上传后自动完成解析、切片、Embedding、Elasticsearch 向量索引，并在聊天时检索上下文增强 LLM 回复。
-- **异步文件处理**：使用 Kafka 解耦上传与解析向量化流程，支持失败重试与死信队列，提高大文件处理的稳定性。
-- **混合检索策略**：Elasticsearch 同时做向量 KNN 与文本匹配，并用 BM25 rescore 优化结果排序。
-- **多租户权限控制**：文档按用户、公开状态、组织标签过滤，搜索和问答阶段都只返回用户有权限访问的知识。
-- **流式对话体验**：WebSocket 推送 LLM 增量输出，前端实时渲染回复，并保留引用来源。
-- **工程化配套**：Spring Security + JWT、Redis 限流与会话缓存、Token 额度统计、MinIO 对象存储、Docker 基础设施脚本、Vue3 管理端。
+- **End-to-end RAG pipeline**: Uploaded documents are parsed, chunked, embedded, indexed in Elasticsearch, and retrieved as grounded context during chat.
+- **Asynchronous document processing**: Kafka decouples upload requests from parsing and vectorization, with retry and dead-letter handling for better reliability.
+- **Hybrid retrieval**: Elasticsearch combines vector KNN retrieval with keyword matching and BM25 rescore to improve answer relevance.
+- **Multi-tenant access control**: Documents are filtered by owner, public visibility, and organization tags so users only retrieve authorized knowledge.
+- **Streaming chat experience**: WebSocket pushes LLM output chunks to the frontend in real time, while keeping source references available.
+- **Production-oriented engineering**: Spring Security + JWT, Redis-based rate limiting and session cache, token quota accounting, MinIO object storage, Docker infrastructure scripts, and a Vue 3 admin console.
 
-## 技术栈
+## Tech Stack
 
-| 层级 | 技术 |
+| Layer | Technologies |
 | --- | --- |
-| 后端 | Java 17, Spring Boot 3.4, Spring MVC, Spring Security, WebSocket, WebFlux WebClient |
-| 数据与中间件 | MySQL 8, Redis, Kafka, Elasticsearch 8, MinIO |
-| AI 能力 | OpenAI-compatible Chat Completion, DeepSeek, DashScope Embedding, 可配置模型 Provider |
-| 文档处理 | Apache Tika, PDFBox, HanLP 中文分词 |
-| 前端 | Vue 3, TypeScript, Vite, Pinia, Vue Router, Naive UI, UnoCSS |
-| 工程工具 | Maven, pnpm, Docker Compose, shell 部署脚本 |
+| Backend | Java 17, Spring Boot 3.4, Spring MVC, Spring Security, WebSocket, WebFlux WebClient |
+| Data & Middleware | MySQL 8, Redis, Kafka, Elasticsearch 8, MinIO |
+| AI | OpenAI-compatible Chat Completion, DeepSeek, DashScope Embedding, configurable model providers |
+| Document Processing | Apache Tika, PDFBox, HanLP Chinese segmentation |
+| Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, Naive UI, UnoCSS |
+| Engineering | Maven, pnpm, Docker Compose, shell deployment scripts |
 
-## 系统架构
+## Architecture
 
 ```mermaid
 flowchart TB
-    User[用户 / 管理员] --> FE[Vue3 前端]
-    FE -->|REST API| API[Spring Boot Controller]
+    User[User / Admin] --> FE[Vue 3 Frontend]
+    FE -->|REST API| API[Spring Boot Controllers]
     FE -->|WebSocket| WS[ChatWebSocketHandler]
 
-    API --> Auth[JWT 认证与组织标签授权]
-    Auth --> Upload[上传 / 文档 / 管理接口]
-    Auth --> Search[搜索接口]
-    Auth --> Admin[后台管理接口]
+    API --> Auth[JWT Authentication & Org-Tag Authorization]
+    Auth --> Upload[Upload / Document / Admin APIs]
+    Auth --> Search[Search APIs]
+    Auth --> Admin[Admin APIs]
 
-    Upload --> MinIO[MinIO 原始文件与分片]
-    Upload --> MySQL[(MySQL 元数据)]
+    Upload --> MinIO[MinIO Original Files & Chunks]
+    Upload --> MySQL[(MySQL Metadata)]
     Upload --> Kafka[Kafka file-processing-topic]
 
     Kafka --> Consumer[FileProcessingConsumer]
-    Consumer --> Parse[ParseService 文档解析与语义切片]
+    Consumer --> Parse[ParseService Document Parsing & Semantic Chunking]
     Parse --> MySQL
     Consumer --> Vector[VectorizationService]
     Vector --> Embed[Embedding Provider]
     Vector --> ES[(Elasticsearch knowledge_base)]
 
     WS --> Chat[ChatHandler]
-    Chat --> Redis[(Redis 会话 / 限流 / 额度缓存)]
+    Chat --> Redis[(Redis Sessions / Rate Limits / Quotas)]
     Chat --> Hybrid[HybridSearchService]
     Hybrid --> Embed
     Hybrid --> ES
     Chat --> Router[LlmProviderRouter]
     Router --> LLM[LLM Provider]
-    LLM -->|流式 Token| WS
+    LLM -->|Streaming Tokens| WS
 ```
 
-## RAG 核心流程
+## RAG Workflow
 
-### 文档入库链路
+### Document Ingestion
 
 ```mermaid
 sequenceDiagram
-    participant U as 用户
-    participant F as 前端
+    participant U as User
+    participant F as Frontend
     participant B as Spring Boot
     participant M as MinIO
     participant K as Kafka
@@ -72,27 +72,27 @@ sequenceDiagram
     participant S as Elasticsearch
     participant D as MySQL
 
-    U->>F: 选择文件并上传
-    F->>B: 分片上传 /api/v1/upload/chunk
-    B->>M: 保存分片对象
-    B->>D: 记录文件与分片状态
-    F->>B: 合并文件 /api/v1/upload/merge
-    B->>M: 合并为完整文件
-    B->>K: 投递 FileProcessingTask
-    K->>P: 消费任务
-    P->>D: 保存文本切片 DocumentVector
-    P->>E: 批量生成 Embedding
-    E-->>P: 返回向量和 Token 用量
-    P->>S: Bulk Index 到 knowledge_base
-    P->>D: 回写实际切片数和 Embedding 用量
+    U->>F: Select and upload a file
+    F->>B: Upload chunks /api/v1/upload/chunk
+    B->>M: Store chunk objects
+    B->>D: Save file and chunk status
+    F->>B: Merge file /api/v1/upload/merge
+    B->>M: Merge into the final object
+    B->>K: Publish FileProcessingTask
+    K->>P: Consume task
+    P->>D: Save text chunks as DocumentVector
+    P->>E: Generate embeddings in batches
+    E-->>P: Return vectors and token usage
+    P->>S: Bulk index into knowledge_base
+    P->>D: Update actual chunk count and embedding usage
 ```
 
-### 问答检索链路
+### Chat Retrieval
 
 ```mermaid
 sequenceDiagram
-    participant U as 用户
-    participant F as 前端
+    participant U as User
+    participant F as Frontend
     participant W as WebSocket
     participant C as ChatHandler
     participant R as Redis
@@ -100,103 +100,103 @@ sequenceDiagram
     participant E as Elasticsearch
     participant L as LLM Provider
 
-    U->>F: 输入问题
-    F->>W: 发送 WebSocket 消息
+    U->>F: Ask a question
+    F->>W: Send WebSocket message
     W->>C: processMessage
-    C->>R: 校验限流并读取历史对话
-    C->>H: 带 userId 执行混合搜索
-    H->>E: KNN + BM25 + 权限过滤
-    E-->>H: 返回 TopK 文档切片
-    H-->>C: 返回带来源信息的检索结果
-    C->>L: 拼接 system prompt + 引用上下文 + 历史消息
-    L-->>C: 流式返回模型输出
-    C-->>F: WebSocket 增量推送
-    C->>R: 保存最近 20 条会话历史与引用映射
+    C->>R: Check rate limit and load conversation history
+    C->>H: Run hybrid search with userId
+    H->>E: KNN + BM25 + permission filters
+    E-->>H: Return TopK document chunks
+    H-->>C: Return results with source metadata
+    C->>L: Build system prompt + references + history
+    L-->>C: Stream model output
+    C-->>F: Push chunks over WebSocket
+    C->>R: Save latest 20 messages and reference mappings
 ```
 
-## 后端模块说明
+## Backend Modules
 
-| 模块 | 说明 |
+| Module | Description |
 | --- | --- |
-| `controller` | 暴露 REST API，覆盖登录注册、上传、文档、搜索、聊天令牌、后台管理、充值等入口 |
-| `service` | 核心业务层，包含上传合并、解析、向量化、混合检索、对话、额度、限流、模型 Provider 路由 |
-| `consumer` | Kafka 消费者，异步执行文件解析和向量化 |
-| `client` | LLM 与 Embedding API 客户端，兼容 OpenAI 风格接口 |
-| `repository` | Spring Data JPA 数据访问层 |
-| `config` | 安全、Kafka、Redis、ES、MinIO、WebSocket、跨域、初始化任务等配置 |
-| `model` / `entity` | JPA 实体、ES 文档、请求响应对象和任务模型 |
+| `controller` | REST API layer for auth, upload, documents, search, chat token, admin operations, and recharge APIs |
+| `service` | Core business logic for upload merge, parsing, vectorization, hybrid search, chat, quotas, rate limits, and model provider routing |
+| `consumer` | Kafka consumers for asynchronous document parsing and vectorization |
+| `client` | LLM and Embedding API clients compatible with OpenAI-style endpoints |
+| `repository` | Spring Data JPA data access layer |
+| `config` | Spring Security, Kafka, Redis, Elasticsearch, MinIO, WebSocket, CORS, and bootstrapping configuration |
+| `model` / `entity` | JPA entities, Elasticsearch documents, request/response objects, and task models |
 
-## 主要功能
+## Features
 
-### 知识库管理
+### Knowledge Base Management
 
-- 支持文档分片上传、上传状态查询、合并、下载、预览和删除。
-- 文件存储在 MinIO，文件元数据、分片信息和文本切片存储在 MySQL。
-- 上传完成后自动投递 Kafka 任务，后台异步解析并建立向量索引。
+- Supports chunked file upload, upload status checks, file merge, download, preview, and deletion.
+- Stores original files in MinIO, while file metadata, chunk metadata, and parsed text chunks are stored in MySQL.
+- Publishes a Kafka task after upload completion so parsing and vector indexing can run asynchronously.
 
-### 文档解析与向量化
+### Document Parsing and Vectorization
 
-- 使用 Apache Tika 自动识别多种文档格式。
-- PDF 使用 PDFBox 做页级解析，保留页码与锚点信息，方便回答时展示来源。
-- 对非 PDF 文档采用流式解析，降低大文件导致 OOM 的风险。
-- 使用 HanLP 辅助中文语义切片，切片后批量调用 Embedding API。
+- Uses Apache Tika to automatically detect and parse multiple document formats.
+- Uses PDFBox for page-level PDF parsing, preserving page numbers and anchor information for answer citations.
+- Uses streaming parsing for non-PDF documents to reduce out-of-memory risk on large files.
+- Uses HanLP-assisted semantic chunking before batch calls to the Embedding API.
 
-### 混合检索
+### Hybrid Retrieval
 
-- 查询阶段先生成 query embedding。
-- Elasticsearch 使用 KNN 召回候选切片。
-- 同时使用关键词匹配和 BM25 rescore，提高中文问答场景下的相关性。
-- 搜索条件中加入 `userId`、`public`、`orgTag` 过滤，保证用户只能检索有权限的文档。
+- Generates a query embedding before retrieval.
+- Uses Elasticsearch KNN to recall candidate chunks.
+- Combines keyword matching and BM25 rescore to improve relevance in Chinese knowledge-base Q&A.
+- Adds `userId`, `public`, and `orgTag` filters directly into the Elasticsearch query so unauthorized documents are never returned.
 
-### AI 对话
+### AI Chat
 
-- 聊天入口采用 WebSocket，前端可以实时收到模型输出。
-- `ChatHandler` 负责读取历史消息、执行检索、构造上下文、调用 LLM、保存对话。
-- Prompt 中强制模型基于参考资料回答，并要求输出来源编号。
-- Redis 保存当前会话和最近历史，提高多轮问答连续性。
+- Uses WebSocket as the chat entry point so the frontend can receive model output in real time.
+- `ChatHandler` loads history, runs retrieval, builds context, calls the LLM, and persists the conversation.
+- The system prompt instructs the model to answer based on provided references and cite source numbers.
+- Redis stores the active conversation and recent message history for multi-turn continuity.
 
-### 权限、限流与额度
+### Security, Rate Limiting, and Quotas
 
-- Spring Security + JWT 实现无状态认证。
-- 组织标签过滤器提供多租户知识访问控制。
-- Redis 限流保护注册、登录、聊天、LLM 请求和 Embedding 请求。
-- 支持 Token 额度预估、预占、结算和回滚，便于做 SaaS 化用量控制。
+- Spring Security + JWT provides stateless authentication.
+- Organization tag authorization supports multi-tenant knowledge isolation.
+- Redis-based rate limiting protects registration, login, chat, LLM requests, and Embedding requests.
+- Token quota logic supports estimation, reservation, settlement, and rollback, which is useful for SaaS-style usage control.
 
-### 管理端与商业化扩展
+### Admin and Monetization Extensions
 
-- 管理端支持用户、组织标签、邀请码、模型 Provider、限流配置、用量看板、充值套餐等管理。
-- 微信支付相关配置和充值订单模型已接入，为商业化订阅或按量付费预留能力。
+- The admin console supports users, organization tags, invite codes, model providers, rate limits, usage dashboards, and recharge packages.
+- WeChat Pay configuration and recharge order models are included, leaving room for subscription or pay-as-you-go monetization.
 
-## 前端页面
+## Frontend Pages
 
-| 页面 | 说明 |
+| Page | Description |
 | --- | --- |
-| `chat` | 知识库对话，支持流式回复、Markdown 渲染、引用预览 |
-| `knowledge-base` | 文档上传、知识库列表、搜索与管理 |
-| `chat-history` | 会话历史查看 |
-| `personal-center` | 用户信息与个人设置 |
-| `user` / `org-tag` | 用户与组织标签管理 |
-| `model-provider` | LLM / Embedding Provider 配置 |
-| `usage-monitor` | 用量监控 |
-| `invite-code` | 邀请码管理 |
-| `recharge` / `recharge-manage` | 充值与套餐管理 |
+| `chat` | Knowledge-base chat with streaming responses, Markdown rendering, and reference preview |
+| `knowledge-base` | Document upload, knowledge-base list, search, and management |
+| `chat-history` | Conversation history |
+| `personal-center` | User profile and personal settings |
+| `user` / `org-tag` | User and organization tag management |
+| `model-provider` | LLM / Embedding provider configuration |
+| `usage-monitor` | Usage monitoring |
+| `invite-code` | Invite code management |
+| `recharge` / `recharge-manage` | Recharge and package management |
 
-## 关键接口
+## Key APIs
 
-| 接口前缀 | 功能 |
+| API Prefix | Purpose |
 | --- | --- |
-| `/api/v1/users` | 注册、登录、当前用户、组织标签、用量、登出 |
-| `/api/v1/auth` | Refresh Token |
-| `/api/v1/upload` | 分片上传、上传状态、合并、支持类型 |
-| `/api/v1/documents` | 文档列表、删除、重建索引、下载、预览、引用详情 |
-| `/api/v1/search` | 混合检索 |
-| `/api/v1/chat` | WebSocket 临时令牌 |
-| `/api/v1/admin` | 用户、知识库、组织、邀请码、模型配置、限流、用量、充值套餐 |
-| `/api/v1/recharge` | 充值套餐、创建订单、支付回调、订单查询 |
+| `/api/v1/users` | Register, login, current user, organization tags, usage, logout |
+| `/api/v1/auth` | Refresh token |
+| `/api/v1/upload` | Chunk upload, upload status, merge, supported file types |
+| `/api/v1/documents` | Document list, deletion, reindexing, download, preview, reference details |
+| `/api/v1/search` | Hybrid search |
+| `/api/v1/chat` | Temporary WebSocket token |
+| `/api/v1/admin` | Users, knowledge base, organizations, invite codes, model config, rate limits, usage, recharge packages |
+| `/api/v1/recharge` | Recharge packages, order creation, payment callback, order lookup |
 
-## 本地运行
+## Local Setup
 
-### 1. 准备环境
+### 1. Requirements
 
 - JDK 17
 - Maven 3.8+
@@ -204,34 +204,34 @@ sequenceDiagram
 - pnpm 8.7+
 - Docker / Docker Compose
 
-### 2. 配置环境变量
+### 2. Configure Environment Variables
 
-复制示例配置并填写真实密钥：
+Copy the sample environment file and fill in real credentials:
 
 ```bash
 cp .env.example .env
 ```
 
-重点配置项：
+Important variables:
 
 ```bash
-JWT_SECRET_KEY=Base64编码的JWT密钥
-DEEPSEEK_API_KEY=你的LLM API Key
-EMBEDDING_API_KEY=你的Embedding API Key
+JWT_SECRET_KEY=Base64-encoded JWT secret
+DEEPSEEK_API_KEY=Your LLM API key
+EMBEDDING_API_KEY=Your Embedding API key
 SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/PaiSmart
-SPRING_DATA_REDIS_PASSWORD=本地Redis密码
-ELASTICSEARCH_PASSWORD=本地ES密码
-MINIO_ACCESS_KEY=MinIO账号
-MINIO_SECRET_KEY=MinIO密码
+SPRING_DATA_REDIS_PASSWORD=Local Redis password
+ELASTICSEARCH_PASSWORD=Local Elasticsearch password
+MINIO_ACCESS_KEY=MinIO access key
+MINIO_SECRET_KEY=MinIO secret key
 ```
 
-### 3. 启动基础设施
+### 3. Start Infrastructure
 
 ```bash
 docker compose -f docs/docker-compose.yaml up -d
 ```
 
-或使用项目脚本：
+Or use the project helper script:
 
 ```bash
 ./infra.sh start
@@ -239,31 +239,31 @@ docker compose -f docs/docker-compose.yaml up -d
 ./infra.sh urls
 ```
 
-### 4. 初始化数据库
+### 4. Initialize the Database
 
 ```bash
 mysql -uroot -p PaiSmart < docs/databases/ddl.sql
 ```
 
-如果使用 JPA 自动建表，可根据环境设置：
+If you prefer JPA schema auto-update, set:
 
 ```bash
 SPRING_JPA_HIBERNATE_DDL_AUTO=update
 ```
 
-### 5. 启动后端
+### 5. Start the Backend
 
 ```bash
 mvn spring-boot:run
 ```
 
-默认端口：
+Default backend URL:
 
 ```text
 http://localhost:8081
 ```
 
-### 6. 启动前端
+### 6. Start the Frontend
 
 ```bash
 cd frontend
@@ -271,21 +271,21 @@ pnpm install
 pnpm run dev
 ```
 
-## 构建与测试
+## Build and Test
 
-后端测试：
+Backend tests:
 
 ```bash
 mvn test
 ```
 
-后端打包：
+Backend package:
 
 ```bash
 mvn clean package
 ```
 
-前端类型检查与构建：
+Frontend type check and build:
 
 ```bash
 cd frontend
@@ -293,56 +293,56 @@ pnpm typecheck
 pnpm build
 ```
 
-## 面试讲解建议
+## Interview Talking Points
 
-### 30 秒介绍
+### 30-Second Pitch
 
-这是一个企业知识库 RAG 问答系统。用户上传文档后，系统会通过 MinIO 存储原文件，用 Kafka 异步触发解析和向量化，把切片和向量写入 MySQL 与 Elasticsearch。用户提问时，后端会按权限执行混合检索，把召回内容拼进 Prompt，再通过 WebSocket 流式返回 LLM 答案和引用来源。项目里还做了 JWT、组织标签多租户、Redis 限流、Token 额度、模型 Provider 配置和后台管理。
+RAG Smart FlowPAI is an enterprise knowledge-base Q&A system. After users upload documents, the system stores original files in MinIO, uses Kafka to trigger asynchronous parsing and vectorization, and writes text chunks and embeddings into MySQL and Elasticsearch. When users ask questions, the backend runs permission-aware hybrid retrieval, injects the retrieved evidence into the prompt, and streams LLM answers with citations over WebSocket. The project also includes JWT authentication, organization-based multi-tenancy, Redis rate limiting, token quota accounting, configurable model providers, and an admin console.
 
-### 可以重点展开的技术点
+### Strong Topics to Expand On
 
-- **为什么用 Kafka**：上传请求只负责文件落库和投递任务，解析、Embedding、索引放到后台做，避免大文件阻塞 HTTP 请求；失败时通过重试和 DLT 提升可靠性。
-- **为什么用混合检索**：纯向量搜索容易召回语义相近但关键词不准的内容，纯 BM25 又不理解语义；项目通过 KNN 召回 + 文本匹配 + rescore 兼顾语义和精确度。
-- **权限如何下沉到检索层**：不是先查全部再在 Java 里过滤，而是在 ES 查询条件中加入用户、公开文档和组织标签过滤，减少越权风险和无效数据传输。
-- **流式对话如何落库**：WebSocket 每收到模型 chunk 就推给前端，同时在服务端累积完整回复，完成后统一写入 Redis 会话历史。
-- **额度如何控制**：调用 LLM / Embedding 前先做 token 预估和额度预占，成功后按实际 usage 结算，失败则回滚，避免并发场景下超用。
+- **Why Kafka is used**: Upload requests only persist files and publish tasks; parsing, embedding, and indexing run in the background so large files do not block HTTP requests. Retry and DLT handling improve reliability.
+- **Why hybrid retrieval is used**: Pure vector search may retrieve semantically close but keyword-inaccurate chunks, while pure BM25 cannot capture deeper semantic similarity. KNN recall + keyword matching + rescore balances both.
+- **How permissions are enforced in retrieval**: The system does not retrieve everything and filter in Java. It pushes `userId`, `public`, and `orgTag` filters into the Elasticsearch query to reduce access risk and unnecessary data transfer.
+- **How streaming chat is persisted**: Each model chunk is pushed to the frontend immediately, while the backend accumulates the full response and writes it to Redis after completion.
+- **How usage quota is controlled**: Before LLM or Embedding calls, the system estimates tokens and reserves quota. Successful calls are settled with actual usage, and failed calls roll back the reservation.
 
-### 可优化方向
+### Future Improvements
 
-- 引入 reranker 或 Cross Encoder，提高 TopK 证据排序质量。
-- 对长文档增加父子切片检索策略：小切片召回，大块上下文注入。
-- 给 Kafka 消费任务增加可观测状态表，前端展示解析中、失败原因和重试状态。
-- 对 ES 索引增加别名和版本迁移流程，降低 mapping 升级风险。
-- 对 WebSocket 完成判断改为基于模型流结束事件，减少依赖定时检测。
+- Add a reranker or Cross Encoder to improve TopK evidence ranking.
+- Use a parent-child chunk retrieval strategy for long documents: small chunks for recall, larger parent context for generation.
+- Add an observable processing-status table for Kafka tasks so the frontend can show parsing progress, failure reasons, and retry states.
+- Introduce Elasticsearch index aliases and migration flow to reduce mapping upgrade risk.
+- Replace timer-based WebSocket completion detection with explicit model stream completion events.
 
-## 目录结构
+## Project Structure
 
 ```text
 .
 ├── src/main/java/com/yizhaoqi/smartpai
-│   ├── client              # LLM 与 Embedding 客户端
-│   ├── config              # Spring Security、Kafka、Redis、ES、MinIO、WebSocket 等配置
-│   ├── consumer            # Kafka 文件处理消费者
-│   ├── controller          # REST API 控制器
-│   ├── entity              # ES 文档与请求响应对象
-│   ├── exception           # 自定义异常
-│   ├── handler             # WebSocket 处理器
-│   ├── model               # JPA 实体与领域模型
-│   ├── repository          # Spring Data JPA Repository
-│   ├── service             # 业务服务与 RAG 核心流程
-│   └── utils               # 工具类
+│   ├── client              # LLM and Embedding clients
+│   ├── config              # Spring Security, Kafka, Redis, ES, MinIO, WebSocket, etc.
+│   ├── consumer            # Kafka file-processing consumer
+│   ├── controller          # REST API controllers
+│   ├── entity              # Elasticsearch documents and request/response objects
+│   ├── exception           # Custom exceptions
+│   ├── handler             # WebSocket handlers
+│   ├── model               # JPA entities and domain models
+│   ├── repository          # Spring Data JPA repositories
+│   ├── service             # Business services and core RAG pipeline
+│   └── utils               # Utilities
 ├── src/main/resources
-│   ├── application.yml     # 主配置
+│   ├── application.yml     # Main configuration
 │   ├── application-dev.yml
 │   ├── application-prod.yml
 │   └── es-mappings         # Elasticsearch mapping
-├── frontend                # Vue3 + TypeScript 前端
+├── frontend                # Vue 3 + TypeScript frontend
 ├── docs
-│   ├── docker-compose.yaml # 本地基础设施
-│   └── databases/ddl.sql   # 数据库 DDL
-├── infra.sh                # 基础设施管理脚本
-├── deploy-front.sh         # 前端部署脚本
-└── pom.xml                 # 后端 Maven 配置
+│   ├── docker-compose.yaml # Local infrastructure
+│   └── databases/ddl.sql   # Database DDL
+├── infra.sh                # Infrastructure helper script
+├── deploy-front.sh         # Frontend deployment script
+└── pom.xml                 # Backend Maven configuration
 ```
 
 ## License
