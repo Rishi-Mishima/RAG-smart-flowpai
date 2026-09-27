@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+.env
+.runtime
+data
+logs
+target
+frontend
+*.log
+*.pem

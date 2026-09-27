@@ -228,94 +228,88 @@ The frontend lives in `frontend/` and is a Vue 3 + TypeScript Vite application. 
 
 The knowledge-base upload UI sends both `public` and `isPublic` values, while the backend upload endpoint consumes `isPublic`.
 
-## Local Development
+## Docker Quick Start
 
-### Requirements
+The root `compose.yaml` builds and starts the frontend, backend, MySQL, Redis, Kafka, MinIO, and Elasticsearch. Docker Engine with Compose v2 is the only runtime prerequisite. Allocate at least 4 GB of memory to Docker because Elasticsearch and the Java backend run together.
 
-- JDK 17
-- Maven 3.8+
-- Node.js 18.20+
-- pnpm 8.7+
-- Docker / Docker Compose
-
-### Configure Environment
-
-Copy the example environment file and fill in local credentials:
+### Configure
 
 ```bash
 cp .env.example .env
 ```
 
-Important values:
+Before exposing the application outside your machine, replace the example database, Redis, MinIO, Elasticsearch, JWT, and administrator credentials in `.env`. `JWT_SECRET_KEY` must decode to 16, 24, or 32 bytes; generate one with `openssl rand -base64 32`.
 
-```bash
-SPRING_PROFILES_ACTIVE=dev
-SERVER_PORT=8081
-SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/PaiSmart?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-SPRING_DATASOURCE_USERNAME=root
-SPRING_DATASOURCE_PASSWORD=change-me
-SPRING_DATA_REDIS_HOST=localhost
-SPRING_DATA_REDIS_PORT=6379
-SPRING_DATA_REDIS_PASSWORD=
-SPRING_KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9092
-MINIO_ENDPOINT=http://localhost:9000
-MINIO_PUBLIC_URL=http://localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET_NAME=uploads
-ELASTICSEARCH_HOST=localhost
-ELASTICSEARCH_PORT=9200
-ELASTICSEARCH_SCHEME=https
-ELASTICSEARCH_USERNAME=elastic
-ELASTICSEARCH_PASSWORD=change-me
-JWT_SECRET_KEY=<base64 secret from openssl rand -base64 32>
-DEEPSEEK_API_KEY=<optional LLM key>
-EMBEDDING_API_KEY=<embedding key>
+The default configuration creates an administrator on the first start:
+
+```text
+username: admin
+password: change-this-admin-password
 ```
 
-The application loads `.env` through `DotenvEnvironmentPostProcessor`.
+Change that password in `.env` before the first start. Once the administrator exists, set `ADMIN_BOOTSTRAP_ENABLED=false`.
 
-### Start Infrastructure
-
-The repository includes an infrastructure Compose file:
+### Start
 
 ```bash
-docker compose -f docs/docker-compose.yaml up -d
+docker compose up --build -d
+docker compose ps
 ```
 
-It starts MySQL, Redis, Kafka, MinIO, and Elasticsearch. The Compose file is infrastructure-only; it does not containerize the Spring Boot or frontend applications.
+The first build downloads container images, Maven/npm dependencies, and the Elasticsearch IK analysis plugin, so it can take several minutes.
 
-The application also defines `NewTopic` beans for the configured Kafka topics. The default application topic is `file-processing-topic1`; the Compose file additionally creates `file-processing` and `vectorization`, so check topic names if you customize Kafka setup.
+| Service | URL |
+| --- | --- |
+| Web application | `http://localhost:8080` |
+| Backend API | `http://localhost:8081` |
+| MinIO API | `http://localhost:9000` |
+| MinIO console | `http://localhost:9001` |
+| Elasticsearch | `http://localhost:9200` |
 
-### Initialize Database
+MySQL creates the `PaiSmart` database, Hibernate creates or updates tables, the application creates Kafka topics and the Elasticsearch index, and the `minio-init` service creates the `uploads` bucket.
 
-The application defaults to Hibernate `ddl-auto=update`, and the repository also includes SQL under `docs/databases/ddl.sql`.
-
-For SQL initialization:
+Check startup logs with:
 
 ```bash
-mysql -uroot -p PaiSmart < docs/databases/ddl.sql
+docker compose logs -f backend frontend
 ```
 
-For first admin creation, temporarily enable the bootstrap values in `.env`:
+Stop the stack without deleting data:
 
 ```bash
-ADMIN_BOOTSTRAP_ENABLED=true
-ADMIN_BOOTSTRAP_USERNAME=admin
-ADMIN_BOOTSTRAP_PASSWORD=<strong password of at least 12 characters>
+docker compose down
 ```
 
-Turn `ADMIN_BOOTSTRAP_ENABLED` back to `false` after the account exists.
-
-### Run Backend
+To also remove the local database, object storage, Kafka, Redis, and Elasticsearch data:
 
 ```bash
+docker compose down -v
+```
+
+The last command permanently deletes the Compose volumes.
+
+### Model Providers
+
+The stack starts without model API keys. In that state, authentication, administration, document storage, and the UI are available, but chat and vectorization cannot call external providers.
+
+Set `DEEPSEEK_API_KEY` and `EMBEDDING_API_KEY` in `.env`, then recreate the backend:
+
+```bash
+docker compose up -d --force-recreate backend
+```
+
+`KNOWLEDGE_BOOTSTRAP_ENABLED` defaults to `false`. After configuring an embedding provider, set it to `true` to import `docs/paismart.pdf` during backend startup.
+
+### Source Development
+
+The same Compose stack can run only the infrastructure while the applications run from source:
+
+```bash
+docker compose up -d mysql redis kafka minio minio-init elasticsearch
 mvn spring-boot:run
 ```
 
-Default backend port: `http://localhost:8081`.
-
-### Run Frontend
+In another terminal:
 
 ```bash
 cd frontend
@@ -323,7 +317,7 @@ pnpm install
 pnpm dev
 ```
 
-The frontend package scripts use Vite modes named `test` and `prod`.
+Source development requires JDK 17, Maven 3.8+, Node.js 18.20+, and pnpm 8.7+. The backend loads the root `.env` through `DotenvEnvironmentPostProcessor`.
 
 ## Testing
 
@@ -367,8 +361,9 @@ There is also a Playwright spec at `frontend/playwright-kb-column.spec.ts`.
 - `SearchController` falls back to the non-permission `search(query, topK)` path when `userId` is absent, despite a comment saying anonymous search should return only public content. The Spring Security configuration requires authentication for `/api/v1/search/**`, but the fallback should still be treated carefully.
 - `OrgTagAuthorizationFilter` only resolves resource metadata from `file_upload`; the code has a TODO for other resource types.
 - Kafka retry and DLT are configured through `DefaultErrorHandler`, but there are no tests proving end-to-end DLT behavior against a real Kafka broker.
-- The Compose file provisions infrastructure only. There is no root Dockerfile for the backend or a full application stack Compose file.
-- The local helper script `infra.sh` contains machine-specific paths, so `docs/docker-compose.yaml` is the portable infrastructure path.
+- The root Compose stack installs the Elasticsearch IK plugin from an external URL on first startup, so the initial Elasticsearch start requires internet access.
+- `docs/docker-compose.yaml` is the older infrastructure-only configuration. Use the root `compose.yaml` for the complete application.
+- The local helper script `infra.sh` contains machine-specific paths and is not used by the root Compose stack.
 - Token accounting uses estimation before provider responses and settles with provider-reported usage when available; estimates are heuristic, not tokenizer-exact.
 - Switching the active embedding provider is blocked when it would require re-embedding existing content; there is no migration job for that path yet.
 - The chat completion monitor infers stream completion by watching response length over time instead of using an explicit provider completion signal.
@@ -393,10 +388,16 @@ src/main/resources
   es-mappings/knowledge_base.json
 
 frontend/
+  Dockerfile
+  nginx.conf    SPA hosting plus REST and WebSocket reverse proxy
   Vue 3 / TypeScript frontend application
 
+Dockerfile      Spring Boot multi-stage image build
+compose.yaml    Complete local stack
+.env.example    Compose and application configuration template
+
 docs/
-  docker-compose.yaml
+  docker-compose.yaml   Legacy infrastructure-only stack
   databases/ddl.sql
   bootstrap knowledge documents and deployment notes
 ```
