@@ -34,7 +34,7 @@ The application supports a private or organization-scoped document knowledge bas
 flowchart TB
     FE[Vue / TypeScript frontend]
     API[Spring Boot REST API]
-    WS[Spring WebSocket /chat/{token}]
+    WS["Spring WebSocket /chat/{token}"]
     AUTH[Spring Security + JWT filters]
     UPLOAD[UploadController + UploadService]
     MINIO[(MinIO)]
